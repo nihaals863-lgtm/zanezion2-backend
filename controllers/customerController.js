@@ -65,7 +65,20 @@ exports.create = async (req, res) => {
 
         const role = req.user.role;
 
-        // ─── SUPER ADMIN: creates a new company (SaaS client) ───
+        // --- EMAIL UNIQUENESS CHECK ---
+        if (email) {
+            const [existingUser] = await db.query('SELECT id FROM users WHERE email = ?', [email]);
+            if (existingUser.length > 0) {
+                return errorResponse(res, 'This email is already registered in the system.', 400);
+            }
+            
+            // Also check companies/customers just in case (for records without users)
+            const [existingCompany] = await db.query('SELECT id FROM companies WHERE email = ?', [email]);
+            const [existingCust] = await db.query('SELECT id FROM customers WHERE email = ?', [email]);
+            if (existingCompany.length > 0 || existingCust.length > 0) {
+                return errorResponse(res, 'This email is already associated with an existing client/customer record.', 400);
+            }
+        }
         if (role === 'super_admin') {
             // Create company
             const [companyResult] = await db.query(

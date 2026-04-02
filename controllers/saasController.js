@@ -72,11 +72,13 @@ exports.provisionClient = async (req, res) => {
 
         const request = requests[0];
 
-        // Check if email already exists
+        // 1. Check if email is already in use
         const [existingUser] = await db.query('SELECT id FROM users WHERE email = ?', [request.email]);
-        if (existingUser.length > 0) return errorResponse(res, 'Email already provisioned.', 409);
+        if (existingUser.length > 0) {
+            return errorResponse(res, 'This email is already registered or provisioned in the system.', 409);
+        }
 
-        // Create company
+        // 2. Create company
         const [companyResult] = await db.query(
             `INSERT INTO companies (name, email, phone, location, plan, contact_person, status, source) VALUES (?, ?, ?, ?, ?, ?, 'active', 'SaaS Portal')`,
             [request.company_name || request.client_name, request.email, request.phone, request.country, request.plan, request.contact_person]
