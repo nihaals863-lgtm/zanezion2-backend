@@ -86,7 +86,7 @@ exports.create = async (req, res) => {
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [business_name || name, email || null, phone || null, address || location || null, plan || 'Essentials',
                  billing_cycle || 'Monthly', payment_method || null, contact_person || contact || null,
-                 (client_type === 'Personal' ? 'Individual' : (client_type || 'SaaS')), logo_url || null, null, source || 'Admin Dashboard', status || 'active']
+                 (client_type === 'Personal' ? 'SaaS' : (client_type || 'SaaS')), logo_url || null, null, source || 'Admin Dashboard', status || 'active']
             );
             const newCompanyId = companyResult.insertId;
 
