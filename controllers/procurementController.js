@@ -1,0 +1,158 @@
+const db = require('../config/db');
+const { companyFilter, companyScope } = require('../middleware/company');
+const { successResponse, errorResponse } = require('../utils/helpers');
+
+// --- PURCHASE REQUESTS ---
+exports.getRequests = async (req, res) => {
+    try {
+        const cf = companyFilter(req);
+        const [rows] = await db.query(`SELECT * FROM purchase_requests WHERE 1=1 ${cf.clause} ORDER BY created_at DESC`, cf.params);
+        return successResponse(res, rows);
+    } catch (err) { return errorResponse(res, 'Failed to fetch requests.', 500); }
+};
+
+exports.createRequest = async (req, res) => {
+    try {
+        const { item_name, category, quantity, estimated_cost, requester, priority, notes } = req.body;
+        const companyId = req.companyScope;
+        const [result] = await db.query(
+            `INSERT INTO purchase_requests (company_id, item_name, category, quantity, estimated_cost, requester, requester_id, priority, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [companyId, item_name, category || null, quantity, estimated_cost || null, requester || req.user.name, req.user.id, priority || 'Normal', notes || null]
+        );
+        return successResponse(res, { id: result.insertId }, 'Purchase request created.', 201);
+    } catch (err) { return errorResponse(res, 'Failed to create request.', 500); }
+};
+
+exports.updateRequest = async (req, res) => {
+    try {
+        const fields = req.body;
+        const sets = [], values = [];
+        for (const [k, v] of Object.entries(fields)) {
+            if (['id', 'created_at', 'company_id'].includes(k)) continue;
+            sets.push(`${k} = ?`); values.push(v);
+        }
+        const cs = companyScope(req);
+        values.push(req.params.id, ...cs.params);
+        await db.query(`UPDATE purchase_requests SET ${sets.join(', ')} WHERE id = ?${cs.clause}`, values);
+        return successResponse(res, { id: req.params.id }, 'Request updated.');
+    } catch (err) { return errorResponse(res, 'Failed to update request.', 500); }
+};
+
+exports.deleteRequest = async (req, res) => {
+    try {
+        const cs = companyScope(req);
+        await db.query(`DELETE FROM purchase_requests WHERE id = ?${cs.clause}`, [req.params.id, ...cs.params]);
+        return successResponse(res, null, 'Request deleted.');
+    } catch (err) { return errorResponse(res, 'Failed to delete request.', 500); }
+};
+
+// --- QUOTES ---
+exports.getQuotes = async (req, res) => {
+    try {
+        const cf = companyFilter(req, 'q');
+        const [rows] = await db.query(`SELECT q.*, v.name as vendor_name FROM quotes q LEFT JOIN vendors v ON q.vendor_id = v.id WHERE 1=1 ${cf.clause} ORDER BY q.created_at DESC`, cf.params);
+        return successResponse(res, rows);
+    } catch (err) { return errorResponse(res, 'Failed to fetch quotes.', 500); }
+};
+
+exports.createQuote = async (req, res) => {
+    try {
+        const { vendor_id, purchase_request_id, items, total_amount, validity_date, notes } = req.body;
+        const companyId = req.companyScope;
+        const [result] = await db.query(
+            `INSERT INTO quotes (company_id, vendor_id, purchase_request_id, items, total_amount, validity_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [companyId, vendor_id, purchase_request_id || null, JSON.stringify(items || []), total_amount || 0, validity_date || null, notes || null]
+        );
+        return successResponse(res, { id: result.insertId }, 'Quote created.', 201);
+    } catch (err) { return errorResponse(res, 'Failed to create quote.', 500); }
+};
+
+exports.updateQuote = async (req, res) => {
+    try {
+        const fields = req.body;
+        const sets = [], values = [];
+        for (const [k, v] of Object.entries(fields)) {
+            if (['id', 'created_at', 'company_id'].includes(k)) continue;
+            sets.push(`${k} = ?`); values.push(k === 'items' ? JSON.stringify(v) : v);
+        }
+        const cs = companyScope(req);
+        values.push(req.params.id, ...cs.params);
+        await db.query(`UPDATE quotes SET ${sets.join(', ')} WHERE id = ?${cs.clause}`, values);
+        return successResponse(res, { id: req.params.id }, 'Quote updated.');
+    } catch (err) { return errorResponse(res, 'Failed to update quote.', 500); }
+};
+
+exports.deleteQuote = async (req, res) => {
+    try {
+        const cs = companyScope(req);
+        await db.query(`DELETE FROM quotes WHERE id = ?${cs.clause}`, [req.params.id, ...cs.params]);
+        return successResponse(res, null, 'Quote deleted.');
+    } catch (err) { return errorResponse(res, 'Failed to delete quote.', 500); }
+};
+
+// --- PURCHASE ORDERS ---
+exports.getPOs = async (req, res) => {
+    try {
+        const cf = companyFilter(req, 'po');
+        const [rows] = await db.query(`SELECT po.*, v.name as vendor_name FROM purchase_orders po LEFT JOIN vendors v ON po.vendor_id = v.id WHERE 1=1 ${cf.clause} ORDER BY po.created_at DESC`, cf.params);
+        return successResponse(res, rows);
+    } catch (err) { return errorResponse(res, 'Failed to fetch POs.', 500); }
+};
+
+exports.createPO = async (req, res) => {
+    try {
+        const { vendorId, items, total_amount, notes } = req.body;
+        const companyId = req.companyScope;
+        const [result] = await db.query(
+            `INSERT INTO purchase_orders (company_id, vendor_id, items, total_amount, notes) VALUES (?, ?, ?, ?, ?)`,
+            [companyId, vendorId, JSON.stringify(items || []), total_amount || 0, notes || null]
+        );
+        return successResponse(res, { id: result.insertId }, 'PO created.', 201);
+    } catch (err) { return errorResponse(res, 'Failed to create PO.', 500); }
+};
+
+exports.updatePO = async (req, res) => {
+    try {
+        const fields = req.body;
+        const sets = [], values = [];
+        for (const [k, v] of Object.entries(fields)) {
+            if (['id', 'created_at', 'company_id'].includes(k)) continue;
+            sets.push(`${k} = ?`); values.push(k === 'items' ? JSON.stringify(v) : v);
+        }
+        const cs = companyScope(req);
+        values.push(req.params.id, ...cs.params);
+        await db.query(`UPDATE purchase_orders SET ${sets.join(', ')} WHERE id = ?${cs.clause}`, values);
+        return successResponse(res, { id: req.params.id }, 'PO updated.');
+    } catch (err) { return errorResponse(res, 'Failed to update PO.', 500); }
+};
+
+// PUT /api/procurement/po/:id/receive
+exports.receiveGoods = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const receivedItems = req.body;
+        const cs = companyScope(req);
+
+        const [pos] = await db.query(`SELECT * FROM purchase_orders WHERE id = ?${cs.clause}`, [id, ...cs.params]);
+        if (pos.length === 0) return errorResponse(res, 'PO not found.', 404);
+
+        let poItems = typeof pos[0].items === 'string' ? JSON.parse(pos[0].items) : pos[0].items;
+
+        let allReceived = true;
+        for (const received of receivedItems) {
+            const item = poItems.find(i => i.id === received.id || i.name === received.name);
+            if (item) {
+                item.received_qty = (item.received_qty || 0) + Number(received.receivedQty);
+                if (item.received_qty < (item.quantity || item.orderedQty)) allReceived = false;
+            }
+        }
+
+        const newStatus = allReceived ? 'Received' : 'Partially Received';
+        await db.query(`UPDATE purchase_orders SET items = ?, status = ? WHERE id = ?${cs.clause}`, [JSON.stringify(poItems), newStatus, id, ...cs.params]);
+
+        return successResponse(res, { id, status: newStatus }, 'Goods received.');
+    } catch (err) {
+        console.error('Receive goods error:', err);
+        return errorResponse(res, 'Failed to receive goods.', 500);
+    }
+};

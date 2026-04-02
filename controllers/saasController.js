@@ -1,0 +1,134 @@
+const bcrypt = require('bcryptjs');
+const db = require('../config/db');
+const { generatePassword, successResponse, errorResponse } = require('../utils/helpers');
+const { sendMail } = require('../utils/mailer');
+
+// --- PLANS ---
+exports.getPlans = async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM saas_plans ORDER BY price ASC');
+        return successResponse(res, rows);
+    } catch (err) { return errorResponse(res, 'Failed to fetch plans.', 500); }
+};
+
+exports.createPlan = async (req, res) => {
+    try {
+        const { name, price, billing_cycle, features, max_users, max_orders } = req.body;
+        const [result] = await db.query(
+            `INSERT INTO saas_plans (name, price, billing_cycle, features, max_users, max_orders) VALUES (?, ?, ?, ?, ?, ?)`,
+            [name, price, billing_cycle || 'Monthly', JSON.stringify(features || []), max_users || 10, max_orders || 100]
+        );
+        return successResponse(res, { id: result.insertId }, 'Plan created.', 201);
+    } catch (err) { return errorResponse(res, 'Failed to create plan.', 500); }
+};
+
+exports.updatePlan = async (req, res) => {
+    try {
+        const fields = req.body;
+        const sets = [], values = [];
+        for (const [k, v] of Object.entries(fields)) {
+            if (['id', 'created_at'].includes(k)) continue;
+            sets.push(`${k} = ?`); values.push(k === 'features' ? JSON.stringify(v) : v);
+        }
+        values.push(req.params.id);
+        await db.query(`UPDATE saas_plans SET ${sets.join(', ')} WHERE id = ?`, values);
+        return successResponse(res, { id: req.params.id }, 'Plan updated.');
+    } catch (err) { return errorResponse(res, 'Failed to update plan.', 500); }
+};
+
+exports.deletePlan = async (req, res) => {
+    try {
+        await db.query('DELETE FROM saas_plans WHERE id = ?', [req.params.id]);
+        return successResponse(res, null, 'Plan deleted.');
+    } catch (err) { return errorResponse(res, 'Failed to delete plan.', 500); }
+};
+
+// --- SUBSCRIPTION REQUESTS ---
+exports.getRequests = async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM saas_requests ORDER BY created_at DESC');
+        return successResponse(res, rows);
+    } catch (err) { return errorResponse(res, 'Failed to fetch requests.', 500); }
+};
+
+exports.submitRequest = async (req, res) => {
+    try {
+        const { clientName, email, phone, companyName, plan, contactPerson, country } = req.body;
+        const [result] = await db.query(
+            `INSERT INTO saas_requests (client_name, email, phone, company_name, plan, contact_person, country) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [clientName, email, phone || null, companyName || null, plan || null, contactPerson || null, country || null]
+        );
+        return successResponse(res, { id: result.insertId }, 'Request submitted.', 201);
+    } catch (err) { return errorResponse(res, 'Failed to submit request.', 500); }
+};
+
+// POST /api/saas/requests/:id/provision
+exports.provisionClient = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const [requests] = await db.query('SELECT * FROM saas_requests WHERE id = ?', [id]);
+        if (requests.length === 0) return errorResponse(res, 'Request not found.', 404);
+
+        const request = requests[0];
+
+        // Check if email already exists
+        const [existingUser] = await db.query('SELECT id FROM users WHERE email = ?', [request.email]);
+        if (existingUser.length > 0) return errorResponse(res, 'Email already provisioned.', 409);
+
+        // Create company
+        const [companyResult] = await db.query(
+            `INSERT INTO companies (name, email, phone, location, plan, contact_person, status, source) VALUES (?, ?, ?, ?, ?, ?, 'active', 'SaaS Portal')`,
+            [request.company_name || request.client_name, request.email, request.phone, request.country, request.plan, request.contact_person]
+        );
+        const companyId = companyResult.insertId;
+
+        // Generate password and create user
+        const password = generatePassword();
+        const hashedPassword = await bcrypt.hash(password, 12);
+
+        await db.query(
+            `INSERT INTO users (company_id, name, email, password, role, status) VALUES (?, ?, ?, ?, 'client', 'active')`,
+            [companyId, request.client_name, request.email, hashedPassword]
+        );
+
+        // Update request status
+        await db.query(`UPDATE saas_requests SET status = 'Provisioned' WHERE id = ?`, [id]);
+
+        // Try to send credentials email
+        try {
+            await sendMail(request.email, 'Welcome to ZaneZion',
+                `<h2>Your ZaneZion account is ready!</h2>
+                 <p>Email: <strong>${request.email}</strong></p>
+                 <p>Password: <strong>${password}</strong></p>
+                 <p>Plan: <strong>${request.plan}</strong></p>`
+            );
+        } catch (e) { console.log('Email skipped'); }
+
+        return successResponse(res, {
+            clientId: companyId,
+            clientName: request.client_name,
+            email: request.email,
+            password,
+            plan: request.plan
+        }, 'Client provisioned successfully.');
+    } catch (err) {
+        console.error('Provision error:', err);
+        return errorResponse(res, 'Provisioning failed.', 500);
+    }
+};
+
+exports.updateRequestStatus = async (req, res) => {
+    try {
+        const { status } = req.body;
+        await db.query('UPDATE saas_requests SET status = ? WHERE id = ?', [status, req.params.id]);
+        return successResponse(res, { id: req.params.id, status }, 'Request status updated.');
+    } catch (err) { return errorResponse(res, 'Failed to update request.', 500); }
+};
+
+exports.deleteRequest = async (req, res) => {
+    try {
+        await db.query('DELETE FROM saas_requests WHERE id = ?', [req.params.id]);
+        return successResponse(res, null, 'Request deleted.');
+    } catch (err) { return errorResponse(res, 'Failed to delete request.', 500); }
+};
