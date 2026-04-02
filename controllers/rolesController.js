@@ -3,7 +3,7 @@ const { successResponse, errorResponse } = require('../utils/helpers');
 
 // All available roles in the system
 const SYSTEM_ROLES = [
-    { id: 1, name: 'client', label: 'Client' },
+    { id: 1, name: 'admin', label: 'Admin' },
     { id: 2, name: 'operation', label: 'Operations' },
     { id: 3, name: 'procurement', label: 'Procurement' },
     { id: 4, name: 'inventory', label: 'Inventory' },

@@ -85,7 +85,7 @@ exports.create = async (req, res) => {
                     const normalizedClientType = client_type === 'Personal' ? 'Individual' : (client_type || 'SaaS');
 
                     await db.query(
-                        `INSERT INTO users (company_id, name, email, password, phone, role, status) VALUES (?, ?, ?, ?, ?, 'client', 'active')`,
+                        `INSERT INTO users (company_id, name, email, password, phone, role, status) VALUES (?, ?, ?, ?, ?, 'admin', 'active')`,
                         [newCompanyId, name, email, hashedPassword, phone || null]
                     );
                     
@@ -207,7 +207,7 @@ exports.remove = async (req, res) => {
         const [customer] = await db.query(`SELECT email FROM customers WHERE id = ?${cs.clause}`, [req.params.id, ...cs.params]);
         if (customer.length === 0) return errorResponse(res, 'Customer not found.', 404);
         if (customer[0].email) {
-            await db.query('DELETE FROM users WHERE email = ? AND role IN ("customer","client")', [customer[0].email]);
+            await db.query('DELETE FROM users WHERE email = ? AND role IN ("customer","admin")', [customer[0].email]);
         }
         await db.query(`DELETE FROM customers WHERE id = ?${cs.clause}`, [req.params.id, ...cs.params]);
         return successResponse(res, null, 'Customer deleted.');

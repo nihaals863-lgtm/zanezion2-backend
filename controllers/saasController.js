@@ -88,7 +88,7 @@ exports.provisionClient = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 12);
 
         await db.query(
-            `INSERT INTO users (company_id, name, email, password, role, status) VALUES (?, ?, ?, ?, 'client', 'active')`,
+            `INSERT INTO users (company_id, name, email, password, role, status) VALUES (?, ?, ?, ?, 'admin', 'active')`,
             [companyId, request.client_name, request.email, hashedPassword]
         );
 
