@@ -40,7 +40,7 @@ exports.getById = async (req, res) => {
 // POST /api/users
 exports.create = async (req, res) => {
     try {
-        const { name, email, password, phone, role, company_id } = req.body;
+        const { name, email, password, phone, role, company_id, employment_status, status } = req.body;
         if (!name || !email || !password) return errorResponse(res, 'Name, email, password required.', 400);
 
         const [existing] = await db.query('SELECT id FROM users WHERE email = ?', [email]);
@@ -49,28 +49,48 @@ exports.create = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 12);
         const assignedCompany = company_id || req.companyScope;
 
+        // --- NORMALIZE ROLE FOR DB ENUM COMPATIBILITY ---
+        let normalizedRole = (role || 'staff').toLowerCase().replace(/\s+/g, '_');
+        if (normalizedRole === 'field_staff') normalizedRole = 'staff';
+
         const [result] = await db.query(
-            `INSERT INTO users (name, email, password, phone, role, company_id, status) VALUES (?, ?, ?, ?, ?, ?, 'active')`,
-            [name, email, hashedPassword, phone || null, role || 'staff', assignedCompany]
+            `INSERT INTO users (name, email, password, phone, role, company_id, employment_status, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [name, email, hashedPassword, phone || null, normalizedRole, assignedCompany, employment_status || 'Full Time', status || 'active']
         );
-        return successResponse(res, { id: result.insertId, name, email, role: role || 'staff' }, 'User created.', 201);
+        return successResponse(res, { id: result.insertId, name, email, role: normalizedRole }, 'User created.', 201);
     } catch (err) {
-        return errorResponse(res, 'Failed to create user.', 500);
+        console.error('CRITICAL: Create user failed', { error: err.message, stack: err.stack, body: req.body });
+        return errorResponse(res, `Failed to create user: ${err.message}`, 500);
     }
 };
 
 // PUT /api/users/:id
 exports.update = async (req, res) => {
     try {
-        const fields = req.body;
+        const rawFields = { ...req.body };
         const sets = [];
         const values = [];
-        for (const [key, val] of Object.entries(fields)) {
+
+        // --- STRICT WHITELIST OF DATABASE COLUMNS ---
+        const allowedColumns = [
+            'name', 'phone', 'role', 'company_id', 'employment_status', 
+            'is_available', 'status', 'joined_date', 'profile_pic_url', 'password'
+        ];
+
+        // Normalize role if present
+        if (rawFields.role) {
+            rawFields.role = rawFields.role.toLowerCase().replace(/\s+/g, '_');
+            if (rawFields.role === 'field_staff') rawFields.role = 'staff';
+        }
+
+        for (const [key, val] of Object.entries(rawFields)) {
+            if (!allowedColumns.includes(key)) continue;
             if (['id', 'created_at', 'email'].includes(key)) continue;
-            if (key === 'password') {
+
+            if (key === 'password' && val) {
                 sets.push('password = ?');
                 values.push(await bcrypt.hash(val, 12));
-            } else {
+            } else if (key !== 'password') {
                 sets.push(`${key} = ?`);
                 values.push(val);
             }
@@ -81,7 +101,8 @@ exports.update = async (req, res) => {
         await db.query(`UPDATE users SET ${sets.join(', ')} WHERE id = ?${cs.clause}`, values);
         return successResponse(res, { id: req.params.id }, 'User updated.');
     } catch (err) {
-        return errorResponse(res, 'Failed to update user.', 500);
+        console.error('CRITICAL: Update user failed', { error: err.message, stack: err.stack, id: req.params.id });
+        return errorResponse(res, `Failed to update user: ${err.message}`, 500);
     }
 };
 

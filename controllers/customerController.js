@@ -184,7 +184,7 @@ exports.create = async (req, res) => {
         return successResponse(res, responseData, 'Customer created.', 201);
     } catch (err) {
         console.error('Create customer error:', err);
-        return errorResponse(res, 'Failed to create customer.', 500);
+        return errorResponse(res, `Failed to create customer: ${err.message}`, 500);
     }
 };
 
@@ -253,7 +253,7 @@ exports.update = async (req, res) => {
         return successResponse(res, { id: req.params.id }, 'Client record updated.');
     } catch (err) {
         console.error('Update error detail:', err);
-        return errorResponse(res, 'Failed to update record.', 500);
+        return errorResponse(res, `Failed to update record: ${err.message}`, 500);
     }
 };
 
