@@ -43,12 +43,16 @@ exports.getAll = async (req, res) => {
 // GET /api/customers/:id
 exports.getById = async (req, res) => {
     try {
+        const isSuperAdmin = req.user.role === 'super_admin';
+        const table = isSuperAdmin ? 'companies' : 'customers';
         const cs = companyScope(req);
-        const [rows] = await db.query(`SELECT * FROM customers WHERE id = ?${cs.clause}`, [req.params.id, ...cs.params]);
-        if (rows.length === 0) return errorResponse(res, 'Customer not found.', 404);
+        
+        const queryParams = isSuperAdmin ? [req.params.id] : [req.params.id, ...cs.params];
+        const [rows] = await db.query(`SELECT * FROM ${table} WHERE id = ?${isSuperAdmin ? '' : cs.clause}`, queryParams);
+        if (rows.length === 0) return errorResponse(res, 'Client not found.', 404);
         return successResponse(res, rows[0]);
     } catch (err) {
-        return errorResponse(res, 'Failed to fetch customer.', 500);
+        return errorResponse(res, 'Failed to fetch record.', 500);
     }
 };
 
@@ -169,9 +173,14 @@ exports.update = async (req, res) => {
             values.push(val);
         }
         if (sets.length === 0) return errorResponse(res, 'No fields to update.', 400);
+        const isSuperAdmin = req.user.role === 'super_admin';
+        const table = isSuperAdmin ? 'companies' : 'customers';
+        
         const cs = companyScope(req);
-        values.push(req.params.id, ...cs.params);
-        await db.query(`UPDATE customers SET ${sets.join(', ')} WHERE id = ?${cs.clause}`, values);
+        values.push(req.params.id);
+        if (!isSuperAdmin) values.push(...cs.params);
+        
+        await db.query(`UPDATE ${table} SET ${sets.join(', ')} WHERE id = ?${isSuperAdmin ? '' : cs.clause}`, values);
 
         // If status changed to active and this customer has no user account yet, create one
         if (fields.status && fields.status.toLowerCase() === 'active') {
@@ -202,16 +211,29 @@ exports.update = async (req, res) => {
 // DELETE /api/customers/:id
 exports.remove = async (req, res) => {
     try {
-        // Also delete associated user if exists
+        const isSuperAdmin = req.user.role === 'super_admin';
+        const table = isSuperAdmin ? 'companies' : 'customers';
         const cs = companyScope(req);
-        const [customer] = await db.query(`SELECT email FROM customers WHERE id = ?${cs.clause}`, [req.params.id, ...cs.params]);
-        if (customer.length === 0) return errorResponse(res, 'Customer not found.', 404);
-        if (customer[0].email) {
-            await db.query('DELETE FROM users WHERE email = ? AND role IN ("customer","admin")', [customer[0].email]);
+
+        // Fetch record to get email for user deletion
+        const query = `SELECT email FROM ${table} WHERE id = ?${isSuperAdmin ? '' : cs.clause}`;
+        const queryParams = isSuperAdmin ? [req.params.id] : [req.params.id, ...cs.params];
+        const [records] = await db.query(query, queryParams);
+        
+        if (records.length === 0) return errorResponse(res, 'Client record not found.', 404);
+        
+        const email = records[0].email;
+        if (email) {
+            // Delete associated users (Admin/Client for companies, Customer for customers)
+            await db.query('DELETE FROM users WHERE email = ? AND role IN ("customer","admin")', [email]);
         }
-        await db.query(`DELETE FROM customers WHERE id = ?${cs.clause}`, [req.params.id, ...cs.params]);
-        return successResponse(res, null, 'Customer deleted.');
+        
+        // Delete the actual record
+        await db.query(`DELETE FROM ${table} WHERE id = ?${isSuperAdmin ? '' : cs.clause}`, queryParams);
+        
+        return successResponse(res, null, 'Client record deleted successfully.');
     } catch (err) {
-        return errorResponse(res, 'Failed to delete customer.', 500);
+        console.error('Delete error:', err);
+        return errorResponse(res, 'Failed to delete record.', 500);
     }
 };
