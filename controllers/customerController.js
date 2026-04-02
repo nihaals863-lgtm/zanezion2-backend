@@ -147,7 +147,7 @@ exports.create = async (req, res) => {
         // Create customer record
         const [result] = await db.query(
             `INSERT INTO customers (company_id, name, email, phone, contact, address, client_type, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [companyId, name, email || null, phone || null, contact || contact_person || null, address || location || null, client_type || 'Direct', status || 'active']
+            [companyId, name, email || null, phone || null, contact || contact_person || null, address || location || null, (client_type === 'Personal' ? 'Direct' : (client_type || 'Direct')), status || 'active']
         );
 
         // Create login user for customer if email provided
@@ -197,9 +197,13 @@ exports.update = async (req, res) => {
         const rawFields = { ...req.body };
         
         // --- MAP CLIENT TYPE FOR DB COMPATIBILITY ---
-        if (isSuperAdmin && rawFields.client_type === 'Personal') {
-            rawFields.client_type = 'SaaS';
-            rawFields.tagline = 'Personal';
+        if (rawFields.client_type === 'Personal') {
+            if (isSuperAdmin) {
+                rawFields.client_type = 'SaaS';
+                rawFields.tagline = 'Personal';
+            } else {
+                rawFields.client_type = 'Direct';
+            }
         }
 
         // --- STRICT WHITELIST OF DATABASE COLUMNS ---
