@@ -11,17 +11,26 @@ exports.getAll = async (req, res) => {
         // Super Admin → sees companies, filtered by client_type if provided
         if (role === 'super_admin') {
             const clientType = req.query.client_type;
-            const typeClause = clientType ? ' AND c.client_type = ?' : '';
-            const typeParams = clientType ? [clientType] : [];
-            const [rows] = await db.query(
-                `SELECT c.*,
+            
+            // Special handling for Personal clients stored as SaaS + tagline metadata
+            let query = `SELECT c.*,
                     (SELECT COUNT(*) FROM users u WHERE u.company_id = c.id) as total_users,
                     (SELECT COUNT(*) FROM customers cu WHERE cu.company_id = c.id) as total_customers
                  FROM companies c
-                 WHERE c.id != 1${typeClause}
-                 ORDER BY c.created_at DESC`,
-                typeParams
-            );
+                 WHERE c.id != 1`;
+            const queryParams = [];
+
+            if (clientType === 'Personal') {
+                query += ` AND (c.tagline = 'Personal' OR c.client_type = 'Personal')`;
+            } else if (clientType === 'SaaS') {
+                query += ` AND c.client_type = 'SaaS' AND (c.tagline != 'Personal' OR c.tagline IS NULL)`;
+            } else if (clientType) {
+                query += ` AND c.client_type = ?`;
+                queryParams.push(clientType);
+            }
+
+            query += ` ORDER BY c.created_at DESC`;
+            const [rows] = await db.query(query, queryParams);
             return successResponse(res, rows);
         }
 
@@ -86,7 +95,9 @@ exports.create = async (req, res) => {
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [business_name || name, email || null, phone || null, address || location || null, plan || 'Essentials',
                  billing_cycle || 'Monthly', payment_method || null, contact_person || contact || null,
-                 (client_type === 'Personal' ? 'SaaS' : (client_type || 'SaaS')), logo_url || null, null, source || 'Admin Dashboard', status || 'active']
+                 (client_type === 'Personal' ? 'SaaS' : (client_type || 'SaaS')), logo_url || null, 
+                 (client_type === 'Personal' ? 'Personal' : (req.body.tagline || null)), 
+                 source || 'Admin Dashboard', status || 'active']
             );
             const newCompanyId = companyResult.insertId;
 
@@ -177,7 +188,17 @@ exports.create = async (req, res) => {
 // PUT /api/customers/:id
 exports.update = async (req, res) => {
     try {
-        const fields = req.body;
+        const isSuperAdmin = req.user.role === 'super_admin';
+        const table = isSuperAdmin ? 'companies' : 'customers';
+
+        const fields = { ...req.body };
+        
+        // --- MAP CLIENT TYPE FOR DB COMPATIBILITY ---
+        if (isSuperAdmin && fields.client_type === 'Personal') {
+            fields.client_type = 'SaaS';
+            fields.tagline = 'Personal';
+        }
+
         const sets = [];
         const values = [];
         for (const [key, val] of Object.entries(fields)) {
@@ -186,9 +207,6 @@ exports.update = async (req, res) => {
             values.push(val);
         }
         if (sets.length === 0) return errorResponse(res, 'No fields to update.', 400);
-        const isSuperAdmin = req.user.role === 'super_admin';
-        const table = isSuperAdmin ? 'companies' : 'customers';
-        
         const cs = companyScope(req);
         values.push(req.params.id);
         if (!isSuperAdmin) values.push(...cs.params);
