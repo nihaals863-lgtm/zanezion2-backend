@@ -80,8 +80,8 @@ exports.provisionClient = async (req, res) => {
 
         // 2. Create company
         const [companyResult] = await db.query(
-            `INSERT INTO companies (name, email, phone, location, plan, contact_person, status, source) VALUES (?, ?, ?, ?, ?, ?, 'active', 'SaaS Portal')`,
-            [request.company_name || request.client_name, request.email, request.phone, request.country, request.plan, request.contact_person]
+            `INSERT INTO companies (name, email, phone, location, plan, contact_person, status, source, tagline, client_type) VALUES (?, ?, ?, ?, ?, ?, 'active', 'SaaS Portal', ?, 'SaaS')`,
+            [request.company_name || request.client_name, request.email, request.phone, request.country, request.plan, request.contact_person, (request.plan === 'Free' ? 'Personal' : (request.tagline || null))]
         );
         const companyId = companyResult.insertId;
 

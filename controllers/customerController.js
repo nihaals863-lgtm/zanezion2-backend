@@ -21,9 +21,11 @@ exports.getAll = async (req, res) => {
             const queryParams = [];
 
             if (clientType === 'Personal') {
-                query += ` AND (c.tagline = 'Personal' OR c.client_type = 'Personal')`;
+                // Personal tab: explicit Personal type OR Free plan
+                query += ` AND (c.tagline = 'Personal' OR c.client_type = 'Personal' OR c.plan = 'Free')`;
             } else if (clientType === 'SaaS') {
-                query += ` AND c.client_type = 'SaaS' AND (c.tagline != 'Personal' OR c.tagline IS NULL)`;
+                // SaaS tab: Must be SaaS type AND NOT Personal tagline AND NOT Free plan
+                query += ` AND c.client_type = 'SaaS' AND (c.tagline != 'Personal' OR c.tagline IS NULL) AND (c.plan != 'Free' OR c.plan IS NULL)`;
             } else if (clientType) {
                 query += ` AND c.client_type = ?`;
                 queryParams.push(clientType);
@@ -95,8 +97,9 @@ exports.create = async (req, res) => {
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [business_name || name, email || null, phone || null, address || location || null, plan || 'Essentials',
                  billing_cycle || 'Monthly', payment_method || null, contact_person || contact || null,
-                 (client_type === 'Personal' ? 'SaaS' : (client_type || 'SaaS')), logo_url || null, 
-                 (client_type === 'Personal' ? 'Personal' : (req.body.tagline || null)), 
+                 (client_type === 'Personal' || plan === 'Free' ? 'SaaS' : (client_type || 'SaaS')), 
+                 logo_url || null, 
+                 (client_type === 'Personal' || plan === 'Free' ? 'Personal' : (req.body.tagline || null)), 
                  source || 'Admin Dashboard', status || 'active']
             );
             const newCompanyId = companyResult.insertId;
@@ -191,22 +194,32 @@ exports.update = async (req, res) => {
         const isSuperAdmin = req.user.role === 'super_admin';
         const table = isSuperAdmin ? 'companies' : 'customers';
 
-        const fields = { ...req.body };
+        const rawFields = { ...req.body };
         
         // --- MAP CLIENT TYPE FOR DB COMPATIBILITY ---
-        if (isSuperAdmin && fields.client_type === 'Personal') {
-            fields.client_type = 'SaaS';
-            fields.tagline = 'Personal';
+        if (isSuperAdmin && rawFields.client_type === 'Personal') {
+            rawFields.client_type = 'SaaS';
+            rawFields.tagline = 'Personal';
         }
+
+        // --- STRICT WHITELIST OF DATABASE COLUMNS ---
+        const allowedColumns = [
+            'name', 'email', 'phone', 'location', 'plan', 'billing_cycle', 
+            'payment_method', 'contact_person', 'client_type', 'logo_url', 
+            'tagline', 'source', 'status', 'address', 'contact', 'business_name'
+        ];
 
         const sets = [];
         const values = [];
-        for (const [key, val] of Object.entries(fields)) {
+        for (const [key, val] of Object.entries(rawFields)) {
+            // Ignore ID/Internal fields and ONLY allow whitelisted columns from the official schema
             if (['id', 'created_at', 'company_id', 'password', 'credentials'].includes(key)) continue;
+            if (!allowedColumns.includes(key)) continue; 
+
             sets.push(`${key} = ?`);
             values.push(val);
         }
-        if (sets.length === 0) return errorResponse(res, 'No fields to update.', 400);
+        if (sets.length === 0) return errorResponse(res, 'No modifyable fields provided.', 400);
         const cs = companyScope(req);
         values.push(req.params.id);
         if (!isSuperAdmin) values.push(...cs.params);
