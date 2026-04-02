@@ -50,8 +50,29 @@ exports.create = async (req, res) => {
         const assignedCompany = company_id || req.companyScope;
 
         // --- NORMALIZE ROLE FOR DB ENUM COMPATIBILITY ---
-        let normalizedRole = (role || 'staff').toLowerCase().replace(/\s+/g, '_');
-        if (normalizedRole === 'field_staff') normalizedRole = 'staff';
+        // frontend "Operations" -> backend "operation"
+        // frontend "Field Staff" -> backend "staff"
+        const roleMap = {
+            'operations': 'operation',
+            'ops': 'operation',
+            'field_staff': 'staff',
+            'staff_management': 'admin',
+            'client_admin': 'admin'
+        };
+
+        let normalizedRole = (role || 'staff').toLowerCase().trim().replace(/\s+/g, '_');
+        if (roleMap[normalizedRole]) {
+            normalizedRole = roleMap[normalizedRole];
+        } else if (normalizedRole.includes('staff')) {
+            normalizedRole = 'staff';
+        }
+
+        console.log('DEBUG: Attempting user creation', { 
+            email, 
+            originalRole: role, 
+            normalizedRole, 
+            assignedCompany 
+        });
 
         const [result] = await db.query(
             `INSERT INTO users (name, email, password, phone, role, company_id, employment_status, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -77,10 +98,23 @@ exports.update = async (req, res) => {
             'is_available', 'status', 'joined_date', 'profile_pic_url', 'password'
         ];
 
-        // Normalize role if present
+        // --- NORMALIZE ROLE FOR DB ENUM COMPATIBILITY ---
         if (rawFields.role) {
-            rawFields.role = rawFields.role.toLowerCase().replace(/\s+/g, '_');
-            if (rawFields.role === 'field_staff') rawFields.role = 'staff';
+            const roleMap = {
+                'operations': 'operation',
+                'ops': 'operation',
+                'field_staff': 'staff',
+                'staff_management': 'admin',
+                'client_admin': 'admin'
+            };
+
+            let normalizedRole = rawFields.role.toLowerCase().trim().replace(/\s+/g, '_');
+            if (roleMap[normalizedRole]) {
+                normalizedRole = roleMap[normalizedRole];
+            } else if (normalizedRole.includes('staff')) {
+                normalizedRole = 'staff';
+            }
+            rawFields.role = normalizedRole;
         }
 
         for (const [key, val] of Object.entries(rawFields)) {
