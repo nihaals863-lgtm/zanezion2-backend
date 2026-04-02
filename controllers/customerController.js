@@ -227,8 +227,8 @@ exports.update = async (req, res) => {
         await db.query(`UPDATE ${table} SET ${sets.join(', ')} WHERE id = ?${isSuperAdmin ? '' : cs.clause}`, values);
 
         // If status changed to active and this customer has no user account yet, create one
-        if (fields.status && fields.status.toLowerCase() === 'active') {
-            const [customer] = await db.query('SELECT * FROM customers WHERE id = ?', [req.params.id]);
+        if (rawFields.status && rawFields.status.toLowerCase() === 'active') {
+            const [customer] = await db.query(`SELECT * FROM ${table} WHERE id = ?`, [req.params.id]);
             if (customer.length > 0 && customer[0].email) {
                 const [existingUser] = await db.query('SELECT id FROM users WHERE email = ?', [customer[0].email]);
                 if (existingUser.length === 0) {
@@ -236,19 +236,20 @@ exports.update = async (req, res) => {
                     const hashedPassword = await bcrypt.hash(userPassword, 12);
                     await db.query(
                         `INSERT INTO users (company_id, name, email, password, role, status) VALUES (?, ?, ?, ?, 'customer', 'active')`,
-                        [customer[0].company_id, customer[0].name, customer[0].email, hashedPassword]
+                        [isSuperAdmin ? customer[0].id : customer[0].company_id, customer[0].name, customer[0].email, hashedPassword]
                     );
                     return successResponse(res, {
                         id: req.params.id,
                         credentials: { email: customer[0].email, password: userPassword, message: `Credentials generated for ${customer[0].name}` }
-                    }, 'Customer activated with login credentials.');
+                    }, 'Client activated with login credentials.');
                 }
             }
         }
 
-        return successResponse(res, { id: req.params.id }, 'Customer updated.');
+        return successResponse(res, { id: req.params.id }, 'Client record updated.');
     } catch (err) {
-        return errorResponse(res, 'Failed to update customer.', 500);
+        console.error('Update error detail:', err);
+        return errorResponse(res, 'Failed to update record.', 500);
     }
 };
 
