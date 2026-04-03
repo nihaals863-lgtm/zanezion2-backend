@@ -69,11 +69,24 @@ exports.getQuotes = async (req, res) => {
 
 exports.createQuote = async (req, res) => {
     try {
-        const { vendor_id, purchase_request_id, items, total_amount, validity_date, notes } = req.body;
+        const { 
+            vendor_id, vendorId,
+            purchase_request_id, purchaseRequestId,
+            items, 
+            total_amount, total, totalAmount,
+            validity_date, validity, validityDate,
+            status, notes 
+        } = req.body;
+        
+        const vId = vendor_id || vendorId;
+        const prId = purchase_request_id || purchaseRequestId;
+        const finalAmount = total_amount || total || totalAmount;
+        const finalValidity = validity_date || validity || validityDate;
         const companyId = req.companyScope;
+
         const [result] = await db.query(
-            `INSERT INTO quotes (company_id, vendor_id, purchase_request_id, items, total_amount, validity_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [companyId, vendor_id, purchase_request_id || null, JSON.stringify(items || []), total_amount || 0, validity_date || null, notes || null]
+            `INSERT INTO quotes (company_id, vendor_id, purchase_request_id, items, total_amount, validity_date, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [companyId, vId, prId || null, JSON.stringify(items || []), finalAmount || 0, finalValidity || null, status || 'Pending', notes || null]
         );
         return successResponse(res, { id: result.insertId }, 'Quote created.', 201);
     } catch (err) { return errorResponse(res, 'Failed to create quote.', 500); }
@@ -83,10 +96,22 @@ exports.updateQuote = async (req, res) => {
     try {
         const fields = req.body;
         const sets = [], values = [];
+        const mapping = {
+            vendorId: 'vendor_id',
+            purchaseRequestId: 'purchase_request_id',
+            totalAmount: 'total_amount',
+            total: 'total_amount',
+            validityDate: 'validity_date',
+            validity: 'validity_date'
+        };
+
         for (const [k, v] of Object.entries(fields)) {
             if (['id', 'created_at', 'company_id'].includes(k)) continue;
-            sets.push(`${k} = ?`); values.push(k === 'items' ? JSON.stringify(v) : v);
+            const fieldName = mapping[k] || k;
+            sets.push(`${fieldName} = ?`); 
+            values.push(k === 'items' ? JSON.stringify(v) : v);
         }
+
         const cs = companyScope(req);
         values.push(req.params.id, ...cs.params);
         await db.query(`UPDATE quotes SET ${sets.join(', ')} WHERE id = ?${cs.clause}`, values);
@@ -113,11 +138,14 @@ exports.getPOs = async (req, res) => {
 
 exports.createPO = async (req, res) => {
     try {
-        const { vendorId, items, total_amount, notes } = req.body;
+        const { vendorId, vendor_id, items, total_amount, total, totalAmount, notes } = req.body;
         const companyId = req.companyScope;
+        const vId = vendor_id || vendorId;
+        const finalAmount = total_amount || total || totalAmount || 0;
+
         const [result] = await db.query(
             `INSERT INTO purchase_orders (company_id, vendor_id, items, total_amount, notes) VALUES (?, ?, ?, ?, ?)`,
-            [companyId, vendorId, JSON.stringify(items || []), total_amount || 0, notes || null]
+            [companyId, vId, JSON.stringify(items || []), finalAmount, notes || null]
         );
         return successResponse(res, { id: result.insertId }, 'PO created.', 201);
     } catch (err) { return errorResponse(res, 'Failed to create PO.', 500); }
@@ -127,10 +155,19 @@ exports.updatePO = async (req, res) => {
     try {
         const fields = req.body;
         const sets = [], values = [];
+        const mapping = {
+            vendorId: 'vendor_id',
+            totalAmount: 'total_amount',
+            total: 'total_amount'
+        };
+
         for (const [k, v] of Object.entries(fields)) {
             if (['id', 'created_at', 'company_id'].includes(k)) continue;
-            sets.push(`${k} = ?`); values.push(k === 'items' ? JSON.stringify(v) : v);
+            const fieldName = mapping[k] || k;
+            sets.push(`${fieldName} = ?`); 
+            values.push(k === 'items' ? JSON.stringify(v) : v);
         }
+
         const cs = companyScope(req);
         values.push(req.params.id, ...cs.params);
         await db.query(`UPDATE purchase_orders SET ${sets.join(', ')} WHERE id = ?${cs.clause}`, values);
