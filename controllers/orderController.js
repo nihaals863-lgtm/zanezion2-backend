@@ -75,10 +75,19 @@ exports.getById = async (req, res) => {
 // POST /api/orders
 exports.create = async (req, res) => {
     try {
-        const { customer_id, vendor_id, type, items, notes, status, due_date, location } = req.body;
+        let { customer_id, vendor_id, type, items, notes, status, due_date, location } = req.body;
         const companyId = req.body.company_id || req.companyScope;
 
         if (!companyId) return errorResponse(res, 'Company ID required.', 400);
+
+        // Auto-resolve customer_id for customer role if not provided
+        if (!customer_id && req.user.role === 'customer') {
+            const [custRows] = await db.query(
+                'SELECT id FROM customers WHERE email = ? AND company_id = ? LIMIT 1',
+                [req.user.email, companyId]
+            );
+            if (custRows.length > 0) customer_id = custRows[0].id;
+        }
 
         // Calculate total from items
         let totalAmount = 0;
@@ -233,20 +242,36 @@ exports.remove = async (req, res) => {
 exports.convertToProject = async (req, res) => {
     try {
         const { orderId } = req.params;
-        const { name, description, manager_id, startDate, location, status, company_id } = req.body;
+        const { name, description, location } = req.body;
+        
+        // Handle both snake_case and camelCase from frontend
+        const managerId = req.body.manager_id || req.body.managerId || req.user.id;
+        const startDate = req.body.start_date || req.body.startDate || req.body.start || null;
+        const companyId = req.body.company_id || req.body.companyId || req.companyScope;
+        const status = req.body.status || 'planned';
 
-        const companyId = company_id || req.companyScope;
+        // Map frontend status to backend enum values
+        let dbStatus = 'planned';
+        if (status.toLowerCase() === 'pending' || status.toLowerCase() === 'planned') {
+            dbStatus = 'planned';
+        } else if (status.toLowerCase() === 'active' || status.toLowerCase() === 'in_progress' || status.toLowerCase() === 'in progress') {
+            dbStatus = 'in_progress';
+        } else if (status.toLowerCase() === 'completed') {
+            dbStatus = 'completed';
+        } else if (status.toLowerCase() === 'on_hold' || status.toLowerCase() === 'on hold') {
+            dbStatus = 'on_hold';
+        }
 
         const [result] = await db.query(
             `INSERT INTO projects (company_id, order_id, name, description, manager_id, location, status, start_date)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [companyId, orderId, name, description || null, manager_id || req.user.id, location || null, status || 'planned', startDate || null]
+            [companyId, orderId, name, description || null, managerId, location || null, dbStatus, startDate]
         );
 
         // Update order status
-        await db.query(`UPDATE orders SET status = 'in_progress' WHERE id = ?`, [orderId]);
+        await db.query(`UPDATE orders SET status = 'in_progress', current_stage = 'completed' WHERE id = ?`, [orderId]);
 
-        // Get project with joins
+        // Get project with joins (Note: table is companies if exists, else it might have been clients)
         const [projects] = await db.query(
             `SELECT p.*, c.name as client_name FROM projects p LEFT JOIN companies c ON p.company_id = c.id WHERE p.id = ?`,
             [result.insertId]
