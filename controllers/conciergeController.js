@@ -12,14 +12,23 @@ exports.getLuxuryItems = async (req, res) => {
 
 exports.createLuxuryItem = async (req, res) => {
     try {
-        const { item_name, owner_name, vault_location, estimated_value, status, notes } = req.body;
-        const companyId = req.companyScope;
+        const b = req.body;
+        const item_name = b.item_name || b.item || b.itemName;
+        const owner_name = b.owner_name || b.owner || b.ownerName;
+        const vault_location = b.vault_location || b.vault || b.vaultLocation;
+        const estimated_value = b.estimated_value || b.value || b.estimatedValue;
+        const status = b.status || 'Stored';
+        const notes = b.notes || null;
+        const companyId = b.company_id || req.companyScope;
         const [result] = await db.query(
             `INSERT INTO luxury_items (company_id, item_name, owner_name, vault_location, estimated_value, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [companyId, item_name, owner_name || null, vault_location || null, estimated_value || null, status || 'Stored', notes || null]
+            [companyId, item_name, owner_name || null, vault_location || null, estimated_value || null, status, notes]
         );
-        return successResponse(res, { id: result.insertId }, 'Luxury item added.', 201);
-    } catch (err) { return errorResponse(res, 'Failed to add luxury item.', 500); }
+        return successResponse(res, { id: result.insertId, item_name }, 'Luxury item added.', 201);
+    } catch (err) {
+        console.error('Create luxury item error:', err);
+        return errorResponse(res, 'Failed to add luxury item.', 500);
+    }
 };
 
 exports.updateLuxuryItem = async (req, res) => {
