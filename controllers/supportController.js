@@ -44,13 +44,21 @@ exports.getEvents = async (req, res) => {
     } catch (err) { return errorResponse(res, 'Failed to fetch events.', 500); }
 };
 
+// Map frontend status strings to valid DB ENUM values for events
+const EVENT_STATUS_MAP = {
+    'planning': 'planned', 'pending approval': 'planned', 'pending': 'planned',
+    'planned': 'planned', 'confirmed': 'confirmed', 'in_progress': 'in_progress',
+    'in progress': 'in_progress', 'completed': 'completed', 'cancelled': 'cancelled'
+};
+const normalizeEventStatus = (status) => EVENT_STATUS_MAP[(status || '').toLowerCase()] || 'planned';
+
 exports.createEvent = async (req, res) => {
     try {
         const { name, event_date, location, client_id, manager_id, status } = req.body;
         const companyId = req.companyScope;
         const [result] = await db.query(
             `INSERT INTO events (company_id, name, event_date, location, client_id, manager_id, status) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [companyId, name, event_date || null, location || null, client_id || null, manager_id || req.user.id, status || 'planned']
+            [companyId, name, event_date || null, location || null, client_id || null, manager_id || req.user.id, normalizeEventStatus(status)]
         );
         const [events] = await db.query(`SELECT e.*, c.name as client_name FROM events e LEFT JOIN companies c ON e.client_id = c.id WHERE e.id = ?`, [result.insertId]);
         return successResponse(res, events[0] || { id: result.insertId }, 'Event created.', 201);
@@ -61,9 +69,10 @@ exports.updateEvent = async (req, res) => {
     try {
         const { name, event_date, location, client_id, status } = req.body;
         const cs = companyScope(req);
+        const dbStatus = status ? normalizeEventStatus(status) : undefined;
         await db.query(
             `UPDATE events SET name = COALESCE(?, name), event_date = COALESCE(?, event_date), location = COALESCE(?, location), client_id = COALESCE(?, client_id), status = COALESCE(?, status) WHERE id = ?${cs.clause}`,
-            [name, event_date, location, client_id, status, req.params.id, ...cs.params]
+            [name, event_date, location, client_id, dbStatus, req.params.id, ...cs.params]
         );
         return successResponse(res, { id: req.params.id }, 'Event updated.');
     } catch (err) { return errorResponse(res, 'Failed to update event.', 500); }
