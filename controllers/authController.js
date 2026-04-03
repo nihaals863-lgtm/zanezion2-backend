@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const db = require('../config/db');
 const { generateOTP, successResponse, errorResponse } = require('../utils/helpers');
 const { sendMail } = require('../utils/mailer');
+const { SYSTEM_MENUS } = require('../config/systemMenus');
 
 // POST /api/auth/login
 exports.login = async (req, res) => {
@@ -48,11 +49,29 @@ exports.login = async (req, res) => {
             { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
         );
 
-        // Fetch menu permissions
-        const [menuPermissions] = await db.query(
+        // Fetch menu permissions and enrich with path/icon from system menus
+        const menuMap = {};
+        SYSTEM_MENUS.forEach(m => { menuMap[m.name] = m; });
+
+        const [rawPerms] = await db.query(
             'SELECT * FROM menu_permissions WHERE role = ? AND (company_id = ? OR company_id IS NULL)',
             [user.role, user.company_id]
         );
+
+        // Enrich DB permissions with path, icon, name so frontend sidebar can render them
+        const menuPermissions = rawPerms.map(p => {
+            const menu = menuMap[p.menu_name];
+            return {
+                ...p,
+                name: p.menu_name,
+                path: menu ? menu.path : null,
+                icon: menu ? menu.icon : 'LayoutDashboard',
+                can_view: !!p.can_view,
+                can_add: !!p.can_create,
+                can_edit: !!p.can_edit,
+                can_delete: !!p.can_delete,
+            };
+        });
 
         // Remove password from response
         delete user.password;
