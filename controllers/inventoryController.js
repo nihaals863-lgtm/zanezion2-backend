@@ -125,19 +125,28 @@ exports.createWarehouse = async (req, res) => {
         const companyId = req.body.company_id || req.companyScope;
         const [result] = await db.query(
             `INSERT INTO warehouses (company_id, name, location, capacity, manager_id) VALUES (?, ?, ?, ?, ?)`,
-            [companyId, name, location || null, capacity || null, manager_id || null]
+            [companyId, name, location || null, parseInt(capacity) || 0, manager_id || null]
         );
         return successResponse(res, { id: result.insertId, name }, 'Warehouse created.', 201);
-    } catch (err) { return errorResponse(res, 'Failed to create warehouse.', 500); }
+    } catch (err) { 
+        console.error('Create warehouse error:', err);
+        return errorResponse(res, 'Failed to create warehouse.', 500); 
+    }
 };
 
 exports.updateWarehouse = async (req, res) => {
     try {
         const { name, location, capacity, manager_id, status } = req.body;
         const cs = companyScope(req);
+        
+        let validStatus = status;
+        if (status && !['active', 'inactive', 'maintenance'].includes(status.toLowerCase())) {
+            validStatus = 'active'; // fallback for invalid enums like 'Stable'
+        }
+
         await db.query(
             `UPDATE warehouses SET name = COALESCE(?, name), location = COALESCE(?, location), capacity = COALESCE(?, capacity), manager_id = COALESCE(?, manager_id), status = COALESCE(?, status) WHERE id = ?${cs.clause}`,
-            [name, location, capacity, manager_id, status, req.params.id, ...cs.params]
+            [name, location, capacity !== undefined ? parseInt(capacity) || 0 : undefined, manager_id, validStatus ? validStatus.toLowerCase() : undefined, req.params.id, ...cs.params]
         );
         return successResponse(res, { id: req.params.id }, 'Warehouse updated.');
     } catch (err) { return errorResponse(res, 'Failed to update warehouse.', 500); }
