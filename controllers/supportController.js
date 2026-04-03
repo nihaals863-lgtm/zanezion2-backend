@@ -98,12 +98,23 @@ exports.getGuestRequests = async (req, res) => {
     } catch (err) { return errorResponse(res, 'Failed to fetch guest requests.', 500); }
 };
 
+// Map frontend guest request status to valid DB ENUM
+const GUEST_STATUS_MAP = {
+    'pending': 'pending', 'in progress': 'in_progress', 'in_progress': 'in_progress',
+    'completed': 'completed', 'cancelled': 'cancelled', 'deferred': 'pending',
+    'canceled': 'cancelled'
+};
+const normalizeGuestStatus = (s) => GUEST_STATUS_MAP[(s || '').toLowerCase()] || 'pending';
+
+const PRIORITY_MAP = { 'low': 'low', 'medium': 'medium', 'high': 'high', 'urgent': 'urgent' };
+const normalizePriority = (p) => PRIORITY_MAP[(p || '').toLowerCase()] || 'medium';
+
 exports.createGuestRequest = async (req, res) => {
     try {
         const { client_id, guest, requested_by, request_details, delivery_time, priority, status } = req.body;
         const companyId = req.companyScope;
-        const dbPriority = (priority || 'medium').toLowerCase();
-        const dbStatus = (status || 'pending').toLowerCase().replace(/\s+/g, '_');
+        const dbPriority = normalizePriority(priority);
+        const dbStatus = normalizeGuestStatus(status);
         const [result] = await db.query(
             `INSERT INTO guest_requests (company_id, client_id, guest, requested_by, request_details, delivery_time, priority, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
             [companyId, client_id || null, guest || null, requested_by || null, request_details || null, delivery_time || null, dbPriority, dbStatus]
@@ -116,8 +127,8 @@ exports.updateGuestRequest = async (req, res) => {
     try {
         const { guest, requested_by, request_details, delivery_time, priority, status } = req.body;
         const cs = companyScope(req);
-        const dbPriority = priority ? priority.toLowerCase() : undefined;
-        const dbStatus = status ? status.toLowerCase().replace(/\s+/g, '_') : undefined;
+        const dbPriority = priority ? normalizePriority(priority) : undefined;
+        const dbStatus = status ? normalizeGuestStatus(status) : undefined;
         await db.query(
             `UPDATE guest_requests SET guest = COALESCE(?, guest), requested_by = COALESCE(?, requested_by), request_details = COALESCE(?, request_details), delivery_time = COALESCE(?, delivery_time), priority = COALESCE(?, priority), status = COALESCE(?, status) WHERE id = ?${cs.clause}`,
             [guest, requested_by, request_details, delivery_time, dbPriority, dbStatus, req.params.id, ...cs.params]
