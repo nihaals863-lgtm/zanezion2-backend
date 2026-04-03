@@ -37,6 +37,30 @@ const migrations = [
             await addColumnIfMissing('companies', 'contact_person', 'VARCHAR(255)', 'payment_method');
             await addColumnIfMissing('companies', 'source', 'VARCHAR(100)', 'business_name');
         }
+    },
+    {
+        name: '003_add_project_id_to_missions',
+        up: async () => {
+            await addColumnIfMissing('missions', 'project_id', 'INT', 'order_id');
+            // Ensure foreign key exists
+            try {
+                await db.query('ALTER TABLE missions ADD CONSTRAINT fk_mission_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL');
+            } catch (e) {
+                // If it fails (usually because it already exists), just log it
+                console.log('  🕒 Note: Fails to add missions.project_id foreign key (might already exist)');
+            }
+        }
+    },
+    {
+        name: '004_update_order_status_enums',
+        up: async () => {
+            await db.query(`
+                ALTER TABLE orders 
+                MODIFY COLUMN status ENUM('created','admin_review','operation','procurement','inventory','logistics','completed','cancelled','in_progress') DEFAULT 'created',
+                MODIFY COLUMN current_stage ENUM('created','admin_review','operation','procurement','inventory','logistics','completed','in_progress') DEFAULT 'created'
+            `);
+            console.log('  ✅ Updated "orders" status/stage enums');
+        }
     }
 ];
 
