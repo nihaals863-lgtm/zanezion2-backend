@@ -206,12 +206,12 @@ exports.update = async (req, res) => {
             }
         }
 
-        // --- STRICT WHITELIST OF DATABASE COLUMNS ---
-        const allowedColumns = [
-            'name', 'email', 'phone', 'location', 'plan', 'billing_cycle',
-            'payment_method', 'contact_person', 'client_type', 'logo_url',
-            'tagline', 'source', 'status', 'address', 'contact', 'business_name'
-        ];
+        // --- STRICT WHITELIST PER TABLE (companies & customers have different columns) ---
+        const allowedColumns = isSuperAdmin
+            ? ['name', 'email', 'phone', 'location', 'plan', 'billing_cycle',
+               'payment_method', 'contact_person', 'client_type', 'logo_url',
+               'tagline', 'source', 'status', 'address', 'contact', 'business_name']
+            : ['name', 'email', 'phone', 'contact', 'address', 'client_type', 'status'];
 
         const sets = [];
         const values = [];
