@@ -5,30 +5,37 @@
  */
 const db = require('../config/db');
 
+// Helper: add column if it doesn't exist
+async function addColumnIfMissing(table, column, definition, after = null) {
+    const [cols] = await db.query(`SHOW COLUMNS FROM ${table} LIKE '${column}'`);
+    if (cols.length === 0) {
+        const afterClause = after ? ` AFTER ${after}` : '';
+        await db.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}${afterClause}`);
+        console.log(`  ✅ Added "${column}" to ${table}`);
+    }
+}
+
 const migrations = [
     {
         name: '001_add_missing_columns_to_companies',
         up: async () => {
-            // Add 'contact' column to companies table if it doesn't exist
-            const [cols] = await db.query(`SHOW COLUMNS FROM companies LIKE 'contact'`);
-            if (cols.length === 0) {
-                await db.query(`ALTER TABLE companies ADD COLUMN contact VARCHAR(255) AFTER contact_person`);
-                console.log('  ✅ Added "contact" column to companies');
-            }
-
-            // Add 'address' column to companies table if it doesn't exist
-            const [cols2] = await db.query(`SHOW COLUMNS FROM companies LIKE 'address'`);
-            if (cols2.length === 0) {
-                await db.query(`ALTER TABLE companies ADD COLUMN address TEXT AFTER contact`);
-                console.log('  ✅ Added "address" column to companies');
-            }
-
-            // Add 'business_name' column to companies table if it doesn't exist
-            const [cols3] = await db.query(`SHOW COLUMNS FROM companies LIKE 'business_name'`);
-            if (cols3.length === 0) {
-                await db.query(`ALTER TABLE companies ADD COLUMN business_name VARCHAR(255) AFTER address`);
-                console.log('  ✅ Added "business_name" column to companies');
-            }
+            await addColumnIfMissing('companies', 'contact', 'VARCHAR(255)', 'contact_person');
+            await addColumnIfMissing('companies', 'address', 'TEXT', 'contact');
+            await addColumnIfMissing('companies', 'business_name', 'VARCHAR(255)', 'address');
+        }
+    },
+    {
+        name: '002_add_all_missing_columns_to_companies',
+        up: async () => {
+            // Ensure ALL columns that the update whitelist allows exist in companies table
+            await addColumnIfMissing('companies', 'location', 'VARCHAR(255)', 'phone');
+            await addColumnIfMissing('companies', 'logo_url', 'VARCHAR(500)', 'location');
+            await addColumnIfMissing('companies', 'tagline', 'VARCHAR(500)', 'logo_url');
+            await addColumnIfMissing('companies', 'plan', "VARCHAR(100) DEFAULT 'Essentials'", 'tagline');
+            await addColumnIfMissing('companies', 'billing_cycle', "ENUM('Monthly','Quarterly','Annually') DEFAULT 'Monthly'", 'plan');
+            await addColumnIfMissing('companies', 'payment_method', 'VARCHAR(100)', 'billing_cycle');
+            await addColumnIfMissing('companies', 'contact_person', 'VARCHAR(255)', 'payment_method');
+            await addColumnIfMissing('companies', 'source', 'VARCHAR(100)', 'business_name');
         }
     }
 ];
