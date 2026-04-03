@@ -193,21 +193,37 @@ exports.receiveGoods = async (req, res) => {
 
         let poItems = typeof pos[0].items === 'string' ? JSON.parse(pos[0].items) : pos[0].items;
 
+        const parsedReceivedItems = Array.isArray(req.body) ? req.body : (req.body.items || []);
+
         let allReceived = true;
-        for (const received of receivedItems) {
+        for (const received of parsedReceivedItems) {
             const item = poItems.find(i => i.id === received.id || i.name === received.name);
             if (item) {
-                item.received_qty = (item.received_qty || 0) + Number(received.receivedQty);
+                const qtyReceivedNow = Number(received.receivedQty || received.receivedNow || 0);
+                item.received_qty = (item.received_qty || 0) + qtyReceivedNow;
                 if (item.received_qty < (item.quantity || item.orderedQty)) allReceived = false;
+
+                // Auto-sync with Inventory Stock
+                if (qtyReceivedNow > 0) {
+                    const [existing] = await db.query('SELECT id, quantity FROM inventory WHERE name = ? AND company_id = ?', [item.name, pos[0].company_id]);
+                    if (existing.length > 0) {
+                        const newQty = existing[0].quantity + qtyReceivedNow;
+                        const invStatus = newQty > 10 ? 'in_stock' : 'low_stock';
+                        await db.query('UPDATE inventory SET quantity = ?, status = ? WHERE id = ?', [newQty, invStatus, existing[0].id]);
+                    } else {
+                        await db.query('INSERT INTO inventory (company_id, name, category, price, quantity, status) VALUES (?, ?, ?, ?, ?, ?)', 
+                        [pos[0].company_id, item.name, item.category || 'General', item.price || 0, qtyReceivedNow, qtyReceivedNow > 10 ? 'in_stock' : 'low_stock']);
+                    }
+                }
             }
         }
 
         const newStatus = allReceived ? 'Received' : 'Partially Received';
         await db.query(`UPDATE purchase_orders SET items = ?, status = ? WHERE id = ?${cs.clause}`, [JSON.stringify(poItems), newStatus, id, ...cs.params]);
 
-        return successResponse(res, { id, status: newStatus }, 'Goods received.');
+        return successResponse(res, { id, status: newStatus }, 'Goods received and inventory auto-updated.');
     } catch (err) {
         console.error('Receive goods error:', err);
-        return errorResponse(res, 'Failed to receive goods.', 500);
+        return errorResponse(res, 'Failed to receive goods or update inventory.', 500);
     }
 };
