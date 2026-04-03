@@ -208,8 +208,8 @@ exports.update = async (req, res) => {
 
         // --- STRICT WHITELIST OF DATABASE COLUMNS ---
         const allowedColumns = [
-            'name', 'email', 'phone', 'location', 'plan', 'billing_cycle', 
-            'payment_method', 'contact_person', 'client_type', 'logo_url', 
+            'name', 'email', 'phone', 'location', 'plan', 'billing_cycle',
+            'payment_method', 'contact_person', 'client_type', 'logo_url',
             'tagline', 'source', 'status', 'address', 'contact', 'business_name'
         ];
 
@@ -218,7 +218,7 @@ exports.update = async (req, res) => {
         for (const [key, val] of Object.entries(rawFields)) {
             // Ignore ID/Internal fields and ONLY allow whitelisted columns from the official schema
             if (['id', 'created_at', 'company_id', 'password', 'credentials'].includes(key)) continue;
-            if (!allowedColumns.includes(key)) continue; 
+            if (!allowedColumns.includes(key)) continue;
 
             sets.push(`${key} = ?`);
             values.push(val);

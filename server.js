@@ -4,6 +4,7 @@ const cors = require('cors');
 const path = require('path');
 
 const errorHandler = require('./middleware/errorHandler');
+const runMigrations = require('./migrations/run');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -67,7 +68,7 @@ app.use(errorHandler);
 // ========================
 // START SERVER
 // ========================
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
     console.log(`
     ╔══════════════════════════════════════════╗
     ║   ZaneZion Backend API Server            ║
@@ -75,6 +76,9 @@ app.listen(PORT, () => {
     ║   Environment: ${process.env.NODE_ENV || 'development'}            ║
     ╚══════════════════════════════════════════╝
     `);
+    // Run pending database migrations
+    console.log('📦 Checking database migrations...');
+    await runMigrations();
 });
 
 module.exports = app;
