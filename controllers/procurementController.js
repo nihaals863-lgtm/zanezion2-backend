@@ -89,7 +89,10 @@ exports.createQuote = async (req, res) => {
             [companyId, vId, prId || null, JSON.stringify(items || []), finalAmount || 0, finalValidity || null, status || 'Pending', notes || null]
         );
         return successResponse(res, { id: result.insertId }, 'Quote created.', 201);
-    } catch (err) { return errorResponse(res, 'Failed to create quote.', 500); }
+    } catch (err) {
+        console.error('Create quote error:', err);
+        return errorResponse(res, 'Failed to create quote.', 500); 
+    }
 };
 
 exports.updateQuote = async (req, res) => {
@@ -116,7 +119,10 @@ exports.updateQuote = async (req, res) => {
         values.push(req.params.id, ...cs.params);
         await db.query(`UPDATE quotes SET ${sets.join(', ')} WHERE id = ?${cs.clause}`, values);
         return successResponse(res, { id: req.params.id }, 'Quote updated.');
-    } catch (err) { return errorResponse(res, 'Failed to update quote.', 500); }
+    } catch (err) {
+        console.error('Update quote error:', err);
+        return errorResponse(res, 'Failed to update quote.', 500); 
+    }
 };
 
 exports.deleteQuote = async (req, res) => {
