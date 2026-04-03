@@ -102,24 +102,28 @@ exports.createGuestRequest = async (req, res) => {
     try {
         const { client_id, guest, requested_by, request_details, delivery_time, priority, status } = req.body;
         const companyId = req.companyScope;
+        const dbPriority = (priority || 'medium').toLowerCase();
+        const dbStatus = (status || 'pending').toLowerCase().replace(/\s+/g, '_');
         const [result] = await db.query(
             `INSERT INTO guest_requests (company_id, client_id, guest, requested_by, request_details, delivery_time, priority, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [companyId, client_id || null, guest || null, requested_by || null, request_details || null, delivery_time || null, priority || 'medium', status || 'pending']
+            [companyId, client_id || null, guest || null, requested_by || null, request_details || null, delivery_time || null, dbPriority, dbStatus]
         );
         return successResponse(res, { id: result.insertId }, 'Guest request created.', 201);
-    } catch (err) { return errorResponse(res, 'Failed to create guest request.', 500); }
+    } catch (err) { console.error('Create guest request error:', err); return errorResponse(res, 'Failed to create guest request.', 500); }
 };
 
 exports.updateGuestRequest = async (req, res) => {
     try {
         const { guest, requested_by, request_details, delivery_time, priority, status } = req.body;
         const cs = companyScope(req);
+        const dbPriority = priority ? priority.toLowerCase() : undefined;
+        const dbStatus = status ? status.toLowerCase().replace(/\s+/g, '_') : undefined;
         await db.query(
             `UPDATE guest_requests SET guest = COALESCE(?, guest), requested_by = COALESCE(?, requested_by), request_details = COALESCE(?, request_details), delivery_time = COALESCE(?, delivery_time), priority = COALESCE(?, priority), status = COALESCE(?, status) WHERE id = ?${cs.clause}`,
-            [guest, requested_by, request_details, delivery_time, priority, status, req.params.id, ...cs.params]
+            [guest, requested_by, request_details, delivery_time, dbPriority, dbStatus, req.params.id, ...cs.params]
         );
         return successResponse(res, { id: req.params.id }, 'Guest request updated.');
-    } catch (err) { return errorResponse(res, 'Failed to update guest request.', 500); }
+    } catch (err) { console.error('Update guest request error:', err); return errorResponse(res, 'Failed to update guest request.', 500); }
 };
 
 exports.deleteGuestRequest = async (req, res) => {

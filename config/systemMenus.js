@@ -25,6 +25,7 @@ const SYSTEM_MENUS = [
     { id: 23, name: 'Staff Terminal', path: '/dashboard/staff-terminal', icon: 'Smartphone' },
     { id: 24, name: 'Settings', path: '/dashboard/settings', icon: 'Settings' },
     { id: 25, name: 'Security Protocol', path: '/dashboard/roles-permissions', icon: 'ShieldCheck' },
+    { id: 26, name: 'Leave & Absence', path: '/dashboard/leave', icon: 'Calendar' },
 ];
 
 const SYSTEM_ROLES = [
