@@ -7,8 +7,8 @@ const { successResponse, errorResponse } = require('../utils/helpers');
 exports.getAll = async (req, res) => {
     try {
         const cf = companyFilter(req);
-        // Non-superadmin: exclude customer and admin roles (they are managed separately)
-        const excludeRoles = req.user.role !== 'super_admin' ? " AND u.role NOT IN ('customer', 'admin')" : '';
+        // Non-superadmin: exclude only customer roles (they are managed separately)
+        const excludeRoles = req.user.role !== 'super_admin' ? " AND u.role NOT IN ('customer')" : '';
         const [rows] = await db.query(
             `SELECT u.id, u.company_id, u.name, u.email, u.phone, u.role, u.is_available, u.employment_status, u.status, u.joined_date, u.profile_pic_url, c.name as company_name
              FROM users u LEFT JOIN companies c ON u.company_id = c.id

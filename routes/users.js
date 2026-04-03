@@ -7,7 +7,7 @@ const { scopeByCompany } = require('../middleware/company');
 
 router.use(verifyToken, scopeByCompany);
 
-router.get('/', requireRole('super_admin', 'admin'), ctrl.getAll);
+router.get('/', requireRole('super_admin', 'admin', 'operation', 'logistics'), ctrl.getAll);
 router.get('/:id', ctrl.getById);
 router.post('/', requireRole('super_admin', 'admin'), ctrl.create);
 router.put('/:id', requireRole('super_admin', 'admin'), ctrl.update);
