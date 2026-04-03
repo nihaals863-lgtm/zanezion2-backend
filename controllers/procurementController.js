@@ -13,14 +13,25 @@ exports.getRequests = async (req, res) => {
 
 exports.createRequest = async (req, res) => {
     try {
-        const { item_name, category, quantity, estimated_cost, requester, priority, notes } = req.body;
+        const { item_name, category, quantity, estimated_cost, requester, priority, notes, items } = req.body;
         const companyId = req.companyScope;
+        
+        let finalItemName = item_name;
+        let finalQuantity = quantity;
+        if (items && Array.isArray(items) && items.length > 0) {
+            if (!finalItemName) finalItemName = items[0].name;
+            if (!finalQuantity) finalQuantity = items[0].qty;
+        }
+
         const [result] = await db.query(
-            `INSERT INTO purchase_requests (company_id, item_name, category, quantity, estimated_cost, requester, requester_id, priority, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [companyId, item_name, category || null, quantity, estimated_cost || null, requester || req.user.name, req.user.id, priority || 'Normal', notes || null]
+            `INSERT INTO purchase_requests (company_id, item_name, items, category, quantity, estimated_cost, requester, requester_id, priority, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [companyId, finalItemName || null, JSON.stringify(items || []), category || null, finalQuantity || 0, estimated_cost || 0, requester || req.user.name, req.user.id, priority || 'Normal', notes || null]
         );
         return successResponse(res, { id: result.insertId }, 'Purchase request created.', 201);
-    } catch (err) { return errorResponse(res, 'Failed to create request.', 500); }
+    } catch (err) { 
+        console.error('Create request error:', err);
+        return errorResponse(res, 'Failed to create request.', 500); 
+    }
 };
 
 exports.updateRequest = async (req, res) => {
@@ -29,7 +40,8 @@ exports.updateRequest = async (req, res) => {
         const sets = [], values = [];
         for (const [k, v] of Object.entries(fields)) {
             if (['id', 'created_at', 'company_id'].includes(k)) continue;
-            sets.push(`${k} = ?`); values.push(v);
+            sets.push(`${k} = ?`); 
+            values.push(k === 'items' ? JSON.stringify(v) : v);
         }
         const cs = companyScope(req);
         values.push(req.params.id, ...cs.params);
