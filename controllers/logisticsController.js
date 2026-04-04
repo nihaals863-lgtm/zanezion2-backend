@@ -59,14 +59,24 @@ exports.createDelivery = async (req, res) => {
     try {
         const { order_id, route, driver_name, plate_number, package_details, status, mission_type, pickup_location, drop_location, passenger_info, delivery_date, pickup_time } = req.body;
         const companyId = req.companyScope;
+
+        // Sanitize order_id - must be valid integer or null (foreign key constraint)
+        const safeOrderId = order_id && !isNaN(Number(order_id)) ? Number(order_id) : null;
+
+        // Sanitize delivery_date - must be valid date or null
+        const safeDeliveryDate = delivery_date && delivery_date !== '' ? delivery_date : null;
+
+        // Sanitize pickup_time - must be valid time or null
+        const safePickupTime = pickup_time && pickup_time !== '' ? pickup_time : null;
+
         const [result] = await db.query(
             `INSERT INTO deliveries (company_id, order_id, mission_type, route, driver_name, plate_number, package_details, pickup_location, drop_location, passenger_info, delivery_date, pickup_time, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [companyId, order_id || null, mission_type || 'Delivery', route || null, driver_name || null, plate_number || null, typeof package_details === 'string' ? package_details : JSON.stringify(package_details || []), pickup_location || null, drop_location || null, typeof passenger_info === 'string' ? passenger_info : JSON.stringify(passenger_info || null), delivery_date || null, pickup_time || null, status || 'pending']
+            [companyId, safeOrderId, mission_type || 'Delivery', route || null, driver_name || null, plate_number || null, typeof package_details === 'string' ? package_details : JSON.stringify(package_details || []), pickup_location || null, drop_location || null, typeof passenger_info === 'string' ? passenger_info : JSON.stringify(passenger_info || null), safeDeliveryDate, safePickupTime, status || 'pending']
         );
         return successResponse(res, { id: result.insertId }, 'Delivery created.', 201);
     } catch (err) {
         console.error('Create delivery error:', err);
-        return errorResponse(res, 'Failed to create delivery.', 500);
+        return errorResponse(res, `Failed to create delivery: ${err.message}`, 500);
     }
 };
 

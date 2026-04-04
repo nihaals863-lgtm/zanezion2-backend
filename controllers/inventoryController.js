@@ -6,7 +6,11 @@ exports.getAll = async (req, res) => {
     try {
         const cf = companyFilter(req, 'i');
         const [rows] = await db.query(
-            `SELECT i.*, w.name as warehouse_name FROM inventory i LEFT JOIN warehouses w ON i.warehouse_id = w.id WHERE 1=1 ${cf.clause} ORDER BY i.created_at DESC`,
+            `SELECT i.*, w.name as warehouse_name, cust.name as client_name
+             FROM inventory i
+             LEFT JOIN warehouses w ON i.warehouse_id = w.id
+             LEFT JOIN customers cust ON i.client_id = cust.id
+             WHERE 1=1 ${cf.clause} ORDER BY i.created_at DESC`,
             cf.params
         );
         return successResponse(res, rows);
