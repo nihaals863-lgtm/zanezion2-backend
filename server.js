@@ -13,7 +13,11 @@ const PORT = process.env.PORT || 5000;
 // MIDDLEWARE
 // ========================
 app.use(cors({
-    origin: "https://new-zanezion.netlify.app",
+    origin: [
+        "https://new-zanezion.netlify.app",
+        "http://localhost:5173",
+        "https://your-second-domain.com"
+    ],
     credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));
