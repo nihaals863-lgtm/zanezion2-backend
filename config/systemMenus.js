@@ -26,6 +26,18 @@ const SYSTEM_MENUS = [
     { id: 24, name: 'Settings', path: '/dashboard/settings', icon: 'Settings' },
     { id: 25, name: 'Security Protocol', path: '/dashboard/roles-permissions', icon: 'ShieldCheck' },
     { id: 26, name: 'Leave & Absence', path: '/dashboard/leave', icon: 'Calendar' },
+    { id: 27, name: 'Pay & Records', path: '/dashboard?tab=pay', icon: 'History' },
+    { id: 28, name: 'Tracking', path: '/dashboard/logistics-tracking', icon: 'Activity' },
+    { id: 29, name: 'Urgent Tasks', path: '/dashboard/logistics-urgent', icon: 'AlertCircle' },
+    { id: 30, name: 'Routes', path: '/dashboard/logistics-routes', icon: 'Navigation' },
+    { id: 31, name: 'Marketplace', path: '/dashboard/store', icon: 'ShoppingBag' },
+    { id: 32, name: 'Track Delivery', path: '/dashboard/track-delivery', icon: 'Truck' },
+    { id: 33, name: 'Audit Log', path: '/dashboard/audits', icon: 'BarChart3' },
+    { id: 34, name: 'Order History', path: '/dashboard/order-history', icon: 'History' },
+    { id: 35, name: 'Concierge Events', path: '/dashboard/client-events', icon: 'Calendar' },
+    { id: 36, name: 'Inventory Alerts', path: '/dashboard/inventory-alerts', icon: 'AlertCircle' },
+    { id: 37, name: 'VIP Access', path: '/dashboard/vip-access', icon: 'ShieldCheck' },
+    { id: 38, name: 'My Orders', path: '/dashboard/client-orders', icon: 'Box' },
 ];
 
 const SYSTEM_ROLES = [
