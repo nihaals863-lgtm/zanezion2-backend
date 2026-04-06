@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const { companyFilter, companyScope } = require('../middleware/company');
 const { successResponse, errorResponse } = require('../utils/helpers');
+const { createNotification } = require('./notificationController');
 
 // GET /api/orders
 exports.getAll = async (req, res) => {
@@ -119,6 +120,24 @@ exports.create = async (req, res) => {
             [orderId, req.user.id]
         );
 
+        // Notify admin about new order
+        await createNotification({
+            companyId: companyId,
+            roleTarget: 'admin',
+            type: 'order',
+            title: 'New Order Created',
+            message: `Order #${orderId} created by ${req.user.name || req.user.email} — $${totalAmount}`,
+            link: '/dashboard/orders'
+        });
+        // Also notify super_admin
+        await createNotification({
+            roleTarget: 'super_admin',
+            type: 'order',
+            title: 'New Order Created',
+            message: `Order #${orderId} created — $${totalAmount}`,
+            link: '/dashboard/orders'
+        });
+
         return successResponse(res, { id: orderId, total_amount: totalAmount }, 'Order created.', 201);
     } catch (err) {
         console.error('Create order error:', err);
@@ -202,6 +221,16 @@ exports.assignToStage = async (req, res) => {
             `INSERT INTO order_flow_logs (order_id, stage, assigned_to, assigned_by, status, notes) VALUES (?, ?, ?, ?, ?, ?)`,
             [id, stage, assigned_to || null, req.user.id, stage === 'completed' ? 'completed' : 'pending', notes || null]
         );
+
+        // Notify the target role about stage transition
+        await createNotification({
+            companyId: order.company_id,
+            roleTarget: stage === 'completed' ? 'admin' : stage,
+            type: 'order',
+            title: `Order #${id} — ${stage.charAt(0).toUpperCase() + stage.slice(1)}`,
+            message: `Order #${id} has been moved to ${stage} stage by ${req.user.name || 'Admin'}`,
+            link: '/dashboard/orders'
+        });
 
         return successResponse(res, { id, stage, assigned_to }, `Order assigned to ${stage} stage.`);
     } catch (err) {

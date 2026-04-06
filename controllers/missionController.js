@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const { companyFilter, companyScope } = require('../middleware/company');
 const { successResponse, errorResponse } = require('../utils/helpers');
+const { createNotification } = require('./notificationController');
 
 exports.getAll = async (req, res) => {
     try {
@@ -32,6 +33,24 @@ exports.convertFromOrder = async (req, res) => {
             `SELECT m.*, u.name as driver_name, v.plate_number FROM missions m LEFT JOIN users u ON m.assigned_driver = u.id LEFT JOIN vehicles v ON m.vehicle_id = v.id WHERE m.id = ?`,
             [result.insertId]
         );
+        // Notify operation + logistics about new mission
+        await createNotification({
+            companyId,
+            roleTarget: 'operation',
+            type: 'order',
+            title: 'New Mission Launched',
+            message: `Mission #${result.insertId} created from Order #${orderId} — ${mission_type || 'Delivery'}`,
+            link: '/dashboard/missions'
+        });
+        await createNotification({
+            companyId,
+            roleTarget: 'logistics',
+            type: 'order',
+            title: 'Mission Awaiting Dispatch',
+            message: `Mission #${result.insertId} — ${mission_type || 'Delivery'} ready for assignment`,
+            link: '/dashboard/missions'
+        });
+
         return successResponse(res, missions[0] || { id: result.insertId }, 'Mission created from order.', 201);
     } catch (err) { return errorResponse(res, 'Failed to create mission.', 500); }
 };

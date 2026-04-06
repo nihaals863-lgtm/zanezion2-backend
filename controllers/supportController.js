@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const { companyFilter, companyScope } = require('../middleware/company');
 const { successResponse, errorResponse } = require('../utils/helpers');
+const { createNotification } = require('./notificationController');
 
 // --- TICKETS ---
 exports.getTickets = async (req, res) => {
@@ -19,6 +20,16 @@ exports.createTicket = async (req, res) => {
             `INSERT INTO support_tickets (company_id, subject, description, priority, submitted_by) VALUES (?, ?, ?, ?, ?)`,
             [companyId, subject, description || null, priority || 'medium', req.user.id]
         );
+        // Notify admin about new support ticket
+        await createNotification({
+            companyId,
+            roleTarget: 'admin',
+            type: 'alert',
+            title: 'New Support Ticket',
+            message: `Ticket #${result.insertId}: ${subject} — Priority: ${priority || 'medium'}`,
+            link: '/dashboard/support-tickets'
+        });
+
         return successResponse(res, { id: result.insertId }, 'Ticket created.', 201);
     } catch (err) { return errorResponse(res, 'Failed to create ticket.', 500); }
 };
@@ -61,6 +72,16 @@ exports.createEvent = async (req, res) => {
             [companyId, name, event_date || null, location || null, client_id || null, manager_id || req.user.id, normalizeEventStatus(status)]
         );
         const [events] = await db.query(`SELECT e.*, c.name as client_name FROM events e LEFT JOIN companies c ON e.client_id = c.id WHERE e.id = ?`, [result.insertId]);
+        // Notify concierge about new event
+        await createNotification({
+            companyId,
+            roleTarget: 'concierge',
+            type: 'order',
+            title: 'New Concierge Event',
+            message: `Event "${name}" scheduled for ${event_date || 'TBD'}`,
+            link: '/dashboard/events'
+        });
+
         return successResponse(res, events[0] || { id: result.insertId }, 'Event created.', 201);
     } catch (err) { return errorResponse(res, 'Failed to create event.', 500); }
 };

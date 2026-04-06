@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const db = require('../config/db');
 const { companyFilter, companyScope } = require('../middleware/company');
 const { successResponse, errorResponse } = require('../utils/helpers');
+const { createNotification } = require('./notificationController');
 
 // GET /api/users
 exports.getAll = async (req, res) => {
@@ -78,6 +79,16 @@ exports.create = async (req, res) => {
             `INSERT INTO users (name, email, password, phone, role, company_id, employment_status, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
             [name, email, hashedPassword, phone || null, normalizedRole, assignedCompany, employment_status || 'Full Time', status || 'active']
         );
+        // Notify admin about new staff
+        await createNotification({
+            companyId: assignedCompany,
+            roleTarget: 'admin',
+            type: 'alert',
+            title: 'New Staff Added',
+            message: `${name} joined as ${normalizedRole}`,
+            link: '/dashboard/users'
+        });
+
         return successResponse(res, { id: result.insertId, name, email, role: normalizedRole }, 'User created.', 201);
     } catch (err) {
         console.error('CRITICAL: Create user failed', { error: err.message, stack: err.stack, body: req.body });

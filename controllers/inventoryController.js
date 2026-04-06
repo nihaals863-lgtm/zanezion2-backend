@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const { companyFilter, companyScope } = require('../middleware/company');
 const { successResponse, errorResponse } = require('../utils/helpers');
+const { createNotification } = require('./notificationController');
 
 exports.getAll = async (req, res) => {
     try {
@@ -106,6 +107,27 @@ exports.adjust = async (req, res) => {
             `INSERT INTO inventory_movements (inventory_id, type, quantity, reference_type, reference_id, reason, performed_by) VALUES (?, ?, ?, ?, ?, ?, ?)`,
             [id, type, adjustQty, reference_type || null, reference_id || null, reason || null, req.user.id]
         );
+
+        // Notify on low stock or out of stock
+        if (status === 'low_stock' || status === 'out_of_stock') {
+            const alertTitle = status === 'out_of_stock' ? 'OUT OF STOCK' : 'Low Stock Alert';
+            await createNotification({
+                companyId: req.companyScope,
+                roleTarget: 'inventory',
+                type: 'alert',
+                title: `${alertTitle}: ${item.name}`,
+                message: `${item.name} is now at ${newQty} units (threshold: ${item.threshold || 10})`,
+                link: '/dashboard/inventory'
+            });
+            await createNotification({
+                companyId: req.companyScope,
+                roleTarget: 'admin',
+                type: 'alert',
+                title: `${alertTitle}: ${item.name}`,
+                message: `${item.name} — ${newQty} units remaining`,
+                link: '/dashboard/inventory'
+            });
+        }
 
         return successResponse(res, { id: parseInt(id), name: item.name, quantity: newQty, status }, 'Stock adjusted.');
     } catch (err) {

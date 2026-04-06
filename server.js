@@ -49,6 +49,7 @@ app.use('/api/concierge', require('./routes/concierge'));
 app.use('/api/saas', require('./routes/saas'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/roles', require('./routes/roles'));
+app.use('/api/notifications', require('./routes/notifications'));
 
 // ========================
 // HEALTH CHECK

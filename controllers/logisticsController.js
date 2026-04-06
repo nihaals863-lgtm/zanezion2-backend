@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const { companyFilter, companyScope } = require('../middleware/company');
 const { successResponse, errorResponse } = require('../utils/helpers');
+const { createNotification } = require('./notificationController');
 
 // --- VEHICLES ---
 exports.getVehicles = async (req, res) => {
@@ -73,6 +74,17 @@ exports.createDelivery = async (req, res) => {
             `INSERT INTO deliveries (company_id, order_id, mission_type, route, driver_name, plate_number, package_details, pickup_location, drop_location, passenger_info, delivery_date, pickup_time, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [companyId, safeOrderId, mission_type || 'Delivery', route || null, driver_name || null, plate_number || null, typeof package_details === 'string' ? package_details : JSON.stringify(package_details || []), pickup_location || null, drop_location || null, typeof passenger_info === 'string' ? passenger_info : JSON.stringify(passenger_info || null), safeDeliveryDate, safePickupTime, status || 'pending']
         );
+        // Notify on new delivery / chauffeur request
+        const isChauffeur = (mission_type || '').toLowerCase() === 'chauffeur';
+        await createNotification({
+            companyId,
+            roleTarget: isChauffeur ? 'concierge' : 'logistics',
+            type: 'delivery',
+            title: isChauffeur ? 'New Chauffeur Request' : 'New Delivery Created',
+            message: isChauffeur ? `Chauffeur service requested — pickup: ${pickup_location || 'TBD'}` : `Delivery #${result.insertId} created for Order #${safeOrderId || 'N/A'}`,
+            link: isChauffeur ? '/dashboard/chauffeur' : '/dashboard/deliveries'
+        });
+
         return successResponse(res, { id: result.insertId }, 'Delivery created.', 201);
     } catch (err) {
         console.error('Create delivery error:', err);
@@ -104,6 +116,31 @@ exports.updateDeliveryStatus = async (req, res) => {
         // If en_route, update vehicle status
         if (status === 'en_route' && vehicle_id) {
             await db.query(`UPDATE vehicles SET status = 'en_route' WHERE id = ?`, [vehicle_id]);
+        }
+
+        // Notify on delivery status changes
+        const statusLabels = { 'dispatched': 'Dispatched', 'en_route': 'In Transit', 'delivered': 'Delivered', 'completed': 'Completed' };
+        if (statusLabels[status]) {
+            // Notify admin
+            await createNotification({
+                companyId: req.companyScope,
+                roleTarget: 'admin',
+                type: 'delivery',
+                title: `Delivery #${req.params.id} — ${statusLabels[status]}`,
+                message: `Delivery status updated to ${statusLabels[status]}`,
+                link: '/dashboard/deliveries'
+            });
+            // Notify client on delivered
+            if (status === 'delivered' || status === 'completed') {
+                await createNotification({
+                    companyId: req.companyScope,
+                    roleTarget: 'customer',
+                    type: 'delivery',
+                    title: 'Your Order Has Been Delivered',
+                    message: `Delivery #${req.params.id} has been delivered successfully`,
+                    link: '/dashboard/track-delivery'
+                });
+            }
         }
 
         return successResponse(res, { id: req.params.id, status }, 'Delivery status updated.');

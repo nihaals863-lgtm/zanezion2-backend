@@ -660,7 +660,25 @@ CREATE TABLE IF NOT EXISTS menu_permissions (
 );
 
 -- ============================================
--- 35. PASSWORD RESETS
+-- 35. NOTIFICATIONS
+-- ============================================
+CREATE TABLE IF NOT EXISTS notifications (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT,
+    user_id INT,
+    role_target VARCHAR(50),
+    type VARCHAR(50) NOT NULL DEFAULT 'info',
+    title VARCHAR(255) NOT NULL,
+    message TEXT,
+    link VARCHAR(255),
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- ============================================
+-- 36. PASSWORD RESETS
 -- ============================================
 CREATE TABLE IF NOT EXISTS password_resets (
     id INT AUTO_INCREMENT PRIMARY KEY,

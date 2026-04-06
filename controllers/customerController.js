@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const db = require('../config/db');
 const { companyFilter, companyScope } = require('../middleware/company');
 const { generatePassword, successResponse, errorResponse } = require('../utils/helpers');
+const { createNotification } = require('./notificationController');
 
 // GET /api/customers (aliased as /api/clients)
 exports.getAll = async (req, res) => {
@@ -140,6 +141,16 @@ exports.create = async (req, res) => {
 
             const responseData = { id: newCompanyId, name: business_name || name };
             if (credentials) responseData.credentials = credentials;
+
+            // Notify super_admin about new client
+            await createNotification({
+                roleTarget: 'super_admin',
+                type: 'alert',
+                title: 'New Client Registered',
+                message: `${business_name || name} has been added as a ${client_type || 'SaaS'} client`,
+                link: '/dashboard/clients'
+            });
+
             return successResponse(res, responseData, 'Client company created.', 201);
         }
 
