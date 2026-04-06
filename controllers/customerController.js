@@ -115,16 +115,19 @@ exports.create = async (req, res) => {
                     // Normalize client_type for DB ENUM if needed
                     const normalizedClientType = client_type === 'Personal' ? 'Individual' : (client_type || 'SaaS');
 
+                    // Personal/Free clients get 'customer' role, SaaS clients get 'admin' role
+                    const userRole = (client_type === 'Personal' || plan === 'Free') ? 'customer' : 'admin';
+
                     await db.query(
-                        `INSERT INTO users (company_id, name, email, password, phone, role, status) VALUES (?, ?, ?, ?, ?, 'admin', 'active')`,
-                        [newCompanyId, name, email, hashedPassword, phone || null]
+                        `INSERT INTO users (company_id, name, email, password, phone, role, status) VALUES (?, ?, ?, ?, ?, ?, 'active')`,
+                        [newCompanyId, name, email, hashedPassword, phone || null, userRole]
                     );
-                    
+
                     // Try to send welcome email
                     try {
                         const { sendMail } = require('../utils/mailer');
-                        await sendMail(email, 'Welcome to ZaneZion', 
-                            `<h2>Your ZaneZion Institutional account is ready!</h2>
+                        await sendMail(email, 'Welcome to ZaneZion',
+                            `<h2>Your ZaneZion ${userRole === 'customer' ? 'Personal' : 'Institutional'} account is ready!</h2>
                              <p>Email: <strong>${email}</strong></p>
                              <p>Password: <strong>${userPassword}</strong></p>
                              <p>Type: <strong>${normalizedClientType}</strong></p>`

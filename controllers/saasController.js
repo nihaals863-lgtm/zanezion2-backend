@@ -89,9 +89,12 @@ exports.provisionClient = async (req, res) => {
         const password = generatePassword();
         const hashedPassword = await bcrypt.hash(password, 12);
 
+        // Free plan clients get 'customer' role, others get 'admin' role
+        const userRole = (request.plan === 'Free') ? 'customer' : 'admin';
+
         await db.query(
-            `INSERT INTO users (company_id, name, email, password, role, status) VALUES (?, ?, ?, ?, 'admin', 'active')`,
-            [companyId, request.client_name, request.email, hashedPassword]
+            `INSERT INTO users (company_id, name, email, password, role, status) VALUES (?, ?, ?, ?, ?, 'active')`,
+            [companyId, request.client_name, request.email, hashedPassword, userRole]
         );
 
         // Update request status
