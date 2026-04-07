@@ -97,8 +97,8 @@ exports.provisionClient = async (req, res) => {
             [companyId, request.client_name, request.email, hashedPassword, userRole]
         );
 
-        // Update request status
-        await db.query(`UPDATE saas_requests SET status = 'Provisioned' WHERE id = ?`, [id]);
+        // Update request status + payment
+        await db.query(`UPDATE saas_requests SET status = 'Provisioned', payment_status = 'Paid' WHERE id = ?`, [id]);
 
         // Try to send credentials email
         try {
