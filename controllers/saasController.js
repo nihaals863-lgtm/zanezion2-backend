@@ -97,8 +97,8 @@ exports.provisionClient = async (req, res) => {
             [companyId, request.client_name, request.email, hashedPassword, userRole]
         );
 
-        // Update request status + payment
-        await db.query(`UPDATE saas_requests SET status = 'Provisioned', payment_status = 'Paid' WHERE id = ?`, [id]);
+        // Update request status + payment + link to company
+        await db.query(`UPDATE saas_requests SET status = 'Provisioned', payment_status = 'Paid', company_id = ? WHERE id = ?`, [companyId, id]);
 
         // Try to send credentials email
         try {
@@ -149,6 +149,26 @@ exports.updateRequest = async (req, res) => {
         if (sets.length === 0) return errorResponse(res, 'No fields to update.', 400);
         values.push(req.params.id);
         await db.query(`UPDATE saas_requests SET ${sets.join(', ')} WHERE id = ?`, values);
+
+        // Sync to linked company (if provisioned)
+        const [reqRow] = await db.query('SELECT company_id FROM saas_requests WHERE id = ?', [req.params.id]);
+        if (reqRow[0]?.company_id) {
+            const compId = reqRow[0].company_id;
+            const companySets = [];
+            const companyVals = [];
+            if (client_name !== undefined) { companySets.push('name = ?'); companyVals.push(client_name); }
+            if (email !== undefined) { companySets.push('email = ?'); companyVals.push(email); }
+            if (phone !== undefined) { companySets.push('phone = ?'); companyVals.push(phone); }
+            if (company_name !== undefined) { companySets.push('business_name = ?'); companyVals.push(company_name); }
+            if (plan !== undefined) { companySets.push('plan = ?'); companyVals.push(plan); }
+            if (contact_person !== undefined) { companySets.push('contact_person = ?'); companyVals.push(contact_person); }
+            if (country !== undefined) { companySets.push('location = ?'); companyVals.push(country); }
+            if (companySets.length > 0) {
+                companyVals.push(compId);
+                await db.query(`UPDATE companies SET ${companySets.join(', ')} WHERE id = ?`, companyVals);
+            }
+        }
+
         return successResponse(res, { id: req.params.id }, 'Request updated.');
     } catch (err) { return errorResponse(res, 'Failed to update request.', 500); }
 };

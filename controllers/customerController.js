@@ -267,6 +267,25 @@ exports.update = async (req, res) => {
             }
         }
 
+        // Sync back to saas_requests if linked
+        if (isSuperAdmin) {
+            const [linkedReq] = await db.query('SELECT id FROM saas_requests WHERE company_id = ?', [req.params.id]);
+            if (linkedReq.length > 0) {
+                const syncSets = [];
+                const syncVals = [];
+                if (rawFields.name) { syncSets.push('client_name = ?'); syncVals.push(rawFields.name); }
+                if (rawFields.email) { syncSets.push('email = ?'); syncVals.push(rawFields.email); }
+                if (rawFields.phone) { syncSets.push('phone = ?'); syncVals.push(rawFields.phone); }
+                if (rawFields.plan) { syncSets.push('plan = ?'); syncVals.push(rawFields.plan); }
+                if (rawFields.contact_person) { syncSets.push('contact_person = ?'); syncVals.push(rawFields.contact_person); }
+                if (rawFields.location) { syncSets.push('country = ?'); syncVals.push(rawFields.location); }
+                if (syncSets.length > 0) {
+                    syncVals.push(linkedReq[0].id);
+                    await db.query(`UPDATE saas_requests SET ${syncSets.join(', ')} WHERE id = ?`, syncVals);
+                }
+            }
+        }
+
         return successResponse(res, { id: req.params.id }, 'Client record updated.');
     } catch (err) {
         console.error('Update error detail:', err);
