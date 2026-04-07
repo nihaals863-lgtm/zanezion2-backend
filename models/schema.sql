@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS companies (
     business_name VARCHAR(255),
     client_type ENUM('SaaS','Personal') DEFAULT 'SaaS',
     source VARCHAR(100),
+    created_by INT DEFAULT NULL,
     status ENUM('active','pending','suspended','rejected') DEFAULT 'active',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP

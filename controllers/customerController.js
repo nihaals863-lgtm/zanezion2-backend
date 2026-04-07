@@ -16,14 +16,17 @@ exports.getAll = async (req, res) => {
             // Special handling for Personal clients stored as SaaS + tagline metadata
             let query = `SELECT c.*,
                     (SELECT COUNT(*) FROM users u WHERE u.company_id = c.id) as total_users,
-                    (SELECT COUNT(*) FROM customers cu WHERE cu.company_id = c.id) as total_customers
+                    (SELECT COUNT(*) FROM customers cu WHERE cu.company_id = c.id) as total_customers,
+                    (SELECT COUNT(*) FROM orders o WHERE o.company_id = c.id) as total_orders
                  FROM companies c
                  WHERE c.id != 1`;
             const queryParams = [];
 
             if (clientType === 'Personal') {
-                // Personal tab: explicit Personal type OR Free plan
+                // Personal tab: explicit Personal type OR Free plan, scoped to current super admin
                 query += ` AND (c.tagline = 'Personal' OR c.client_type = 'Personal' OR c.plan = 'Free')`;
+                query += ` AND (c.created_by = ? OR c.created_by IS NULL)`;
+                queryParams.push(req.user.id);
             } else if (clientType === 'SaaS') {
                 // SaaS tab: Must be SaaS type AND NOT Personal tagline AND NOT Free plan
                 query += ` AND c.client_type = 'SaaS' AND (c.tagline != 'Personal' OR c.tagline IS NULL) AND (c.plan != 'Free' OR c.plan IS NULL)`;
@@ -94,14 +97,14 @@ exports.create = async (req, res) => {
         if (role === 'super_admin') {
             // Create company
             const [companyResult] = await db.query(
-                `INSERT INTO companies (name, email, phone, location, plan, billing_cycle, payment_method, contact_person, client_type, logo_url, tagline, source, status)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                `INSERT INTO companies (name, email, phone, location, plan, billing_cycle, payment_method, contact_person, client_type, logo_url, tagline, source, created_by, status)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [business_name || name, email || null, phone || null, address || location || null, plan || 'Essentials',
                  billing_cycle || 'Monthly', payment_method || null, contact_person || contact || null,
-                 (client_type === 'Personal' || plan === 'Free' ? 'SaaS' : (client_type || 'SaaS')), 
-                 logo_url || null, 
-                 (client_type === 'Personal' || plan === 'Free' ? 'Personal' : (req.body.tagline || null)), 
-                 source || 'Admin Dashboard', status || 'active']
+                 (client_type === 'Personal' || plan === 'Free' ? 'SaaS' : (client_type || 'SaaS')),
+                 logo_url || null,
+                 (client_type === 'Personal' || plan === 'Free' ? 'Personal' : (req.body.tagline || null)),
+                 source || 'Admin Dashboard', req.user.id, status || 'active']
             );
             const newCompanyId = companyResult.insertId;
 

@@ -6,13 +6,23 @@ const { createNotification } = require('./notificationController');
 exports.getAll = async (req, res) => {
     try {
         const cf = companyFilter(req, 'i');
+        const role = req.user.role;
+
+        // Customer role: show only Marketplace items from all companies (global catalog)
+        let whereClause = `WHERE 1=1 ${cf.clause}`;
+        let params = [...cf.params];
+        if (role === 'customer') {
+            whereClause = `WHERE i.inventory_type = 'Marketplace'`;
+            params = [];
+        }
+
         const [rows] = await db.query(
             `SELECT i.*, w.name as warehouse_name, cust.name as client_name
              FROM inventory i
              LEFT JOIN warehouses w ON i.warehouse_id = w.id
              LEFT JOIN customers cust ON i.client_id = cust.id
-             WHERE 1=1 ${cf.clause} ORDER BY i.created_at DESC`,
-            cf.params
+             ${whereClause} ORDER BY i.created_at DESC`,
+            params
         );
         return successResponse(res, rows);
     } catch (err) { return errorResponse(res, 'Failed to fetch inventory.', 500); }

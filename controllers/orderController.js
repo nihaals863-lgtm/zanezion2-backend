@@ -81,13 +81,19 @@ exports.create = async (req, res) => {
 
         if (!companyId) return errorResponse(res, 'Company ID required.', 400);
 
-        // Auto-resolve customer_id for customer role if not provided
-        if (!customer_id && req.user.role === 'customer') {
+        // Auto-resolve customer_id for customer role
+        if (req.user.role === 'customer') {
+            // Try to find matching record in customers table
             const [custRows] = await db.query(
                 'SELECT id FROM customers WHERE email = ? AND company_id = ? LIMIT 1',
                 [req.user.email, companyId]
             );
-            if (custRows.length > 0) customer_id = custRows[0].id;
+            if (custRows.length > 0) {
+                customer_id = custRows[0].id;
+            } else {
+                // Personal client: no record in customers table, set null (created_by tracks the user)
+                customer_id = null;
+            }
         }
 
         // Calculate total from items
@@ -253,6 +259,27 @@ exports.getFlowLogs = async (req, res) => {
         return successResponse(res, logs);
     } catch (err) {
         return errorResponse(res, 'Failed to fetch flow logs.', 500);
+    }
+};
+
+// GET /api/orders/by-company/:companyId — Super Admin: get orders for a specific company
+exports.getByCompany = async (req, res) => {
+    try {
+        const { companyId } = req.params;
+        const [rows] = await db.query(
+            `SELECT o.*, c.name as customer_name, v.name as vendor_name, u.name as assigned_to_name
+             FROM orders o
+             LEFT JOIN customers c ON o.customer_id = c.id
+             LEFT JOIN vendors v ON o.vendor_id = v.id
+             LEFT JOIN users u ON o.assigned_to = u.id
+             WHERE o.company_id = ?
+             ORDER BY o.created_at DESC`,
+            [companyId]
+        );
+        return successResponse(res, rows);
+    } catch (err) {
+        console.error('Get orders by company error:', err);
+        return errorResponse(res, 'Failed to fetch orders.', 500);
     }
 };
 

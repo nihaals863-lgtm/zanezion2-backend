@@ -13,6 +13,9 @@ router.post('/projects', requireRole('super_admin', 'admin', 'operation'), ctrl.
 router.put('/projects/:id', requireRole('super_admin', 'admin', 'operation'), ctrl.updateProject);
 router.delete('/projects/:id', requireRole('super_admin', 'admin'), ctrl.deleteProject);
 
+// Super Admin: orders by company
+router.get('/by-company/:companyId', requireRole('super_admin'), ctrl.getByCompany);
+
 // Order conversion
 router.post('/convert/:orderId', requireRole('super_admin', 'admin', 'operation'), ctrl.convertToProject);
 
