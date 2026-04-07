@@ -16,7 +16,7 @@ app.use(cors({
     origin: [
         "https://new-zanezion.netlify.app",
         "http://localhost:5173",
-        "https://your-second-domain.com"
+       "https://zanezion.kiaansoftware.com"
     ],
     credentials: true
 }));
