@@ -103,10 +103,14 @@ exports.create = async (req, res) => {
             totalAmount += (parseFloat(item.price || item.unit_price || 0) * parseInt(item.qty || item.quantity || 1));
         });
 
+        // Customer role orders go directly to admin_review queue
+        const isCustomerRole = req.user.role === 'customer';
+        const initialStatus = isCustomerRole ? 'admin_review' : 'created';
+
         const [result] = await db.query(
             `INSERT INTO orders (company_id, customer_id, vendor_id, created_by, type, items, notes, location, total_amount, status, current_stage, due_date)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'created', 'created', ?)`,
-            [companyId, customer_id || null, vendor_id || null, req.user.id, type || 'Custom Order', JSON.stringify(parsedItems), notes || null, location || null, totalAmount, due_date || null]
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [companyId, customer_id || null, vendor_id || null, req.user.id, type || 'Custom Order', JSON.stringify(parsedItems), notes || null, location || null, totalAmount, initialStatus, initialStatus, due_date || null]
         );
 
         const orderId = result.insertId;
@@ -171,6 +175,13 @@ exports.update = async (req, res) => {
         const cs = companyScope(req);
         values.push(req.params.id, ...cs.params);
         await db.query(`UPDATE orders SET ${sets.join(', ')} WHERE id = ?${cs.clause}`, values);
+
+        // Notify about order update
+        const [orderRow] = await db.query('SELECT company_id FROM orders WHERE id = ?', [req.params.id]);
+        const orderCompanyId = orderRow[0]?.company_id;
+        await createNotification({ companyId: orderCompanyId, roleTarget: 'admin', type: 'order', title: 'Order Updated', message: `Order #${req.params.id} has been updated by ${req.user.name || 'Admin'}`, link: '/dashboard/orders' });
+        await createNotification({ companyId: orderCompanyId, roleTarget: 'customer', type: 'order', title: 'Your Order Updated', message: `Order #${req.params.id} details have been updated`, link: '/dashboard/client-orders' });
+
         return successResponse(res, { id: req.params.id }, 'Order updated.');
     } catch (err) {
         console.error('Update order error:', err);
@@ -184,6 +195,14 @@ exports.updateStatus = async (req, res) => {
         const { status } = req.body;
         const cs = companyScope(req);
         await db.query(`UPDATE orders SET status = ? WHERE id = ?${cs.clause}`, [status, req.params.id, ...cs.params]);
+
+        // Notify about status change
+        const [orderRow] = await db.query('SELECT company_id FROM orders WHERE id = ?', [req.params.id]);
+        const orderCompanyId = orderRow[0]?.company_id;
+        await createNotification({ companyId: orderCompanyId, roleTarget: 'customer', type: 'order', title: 'Order Status Updated', message: `Order #${req.params.id} is now "${status}"`, link: '/dashboard/client-orders' });
+        await createNotification({ companyId: orderCompanyId, roleTarget: 'admin', type: 'order', title: `Order #${req.params.id} — ${status}`, message: `Status changed to ${status} by ${req.user.name || 'System'}`, link: '/dashboard/orders' });
+        await createNotification({ roleTarget: 'super_admin', type: 'order', title: `Order #${req.params.id} — ${status}`, message: `Status changed to ${status}`, link: '/dashboard/clients' });
+
         return successResponse(res, { id: req.params.id, status }, 'Order status updated.');
     } catch (err) {
         return errorResponse(res, 'Failed to update status.', 500);
@@ -287,7 +306,14 @@ exports.getByCompany = async (req, res) => {
 exports.remove = async (req, res) => {
     try {
         const cs = companyScope(req);
+        const [orderRow] = await db.query('SELECT company_id FROM orders WHERE id = ?', [req.params.id]);
+        const orderCompanyId = orderRow[0]?.company_id;
+
         await db.query(`DELETE FROM orders WHERE id = ?${cs.clause}`, [req.params.id, ...cs.params]);
+
+        await createNotification({ companyId: orderCompanyId, roleTarget: 'admin', type: 'alert', title: 'Order Cancelled', message: `Order #${req.params.id} has been removed by ${req.user.name || 'Admin'}`, link: '/dashboard/orders' });
+        await createNotification({ companyId: orderCompanyId, roleTarget: 'customer', type: 'alert', title: 'Order Cancelled', message: `Your Order #${req.params.id} has been cancelled`, link: '/dashboard/client-orders' });
+
         return successResponse(res, null, 'Order deleted.');
     } catch (err) {
         return errorResponse(res, 'Failed to delete order.', 500);
@@ -332,6 +358,9 @@ exports.convertToProject = async (req, res) => {
             `SELECT p.*, c.name as client_name FROM projects p LEFT JOIN companies c ON p.company_id = c.id WHERE p.id = ?`,
             [result.insertId]
         );
+
+        await createNotification({ companyId, roleTarget: 'operation', type: 'order', title: 'Order Converted to Project', message: `Order #${orderId} → Project "${name}"`, link: '/dashboard/projects' });
+        await createNotification({ companyId, roleTarget: 'admin', type: 'order', title: 'Project Created from Order', message: `Order #${orderId} converted to project "${name}"`, link: '/dashboard/projects' });
 
         return successResponse(res, projects[0] || { id: result.insertId }, 'Order converted to project.', 201);
     } catch (err) {

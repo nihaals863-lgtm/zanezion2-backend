@@ -59,7 +59,18 @@ exports.getDeliveries = async (req, res) => {
 exports.createDelivery = async (req, res) => {
     try {
         const { order_id, route, driver_name, plate_number, package_details, status, mission_type, pickup_location, drop_location, passenger_info, delivery_date, pickup_time } = req.body;
-        const companyId = req.companyScope;
+        // For super_admin: resolve company_id from request body or from the order
+        let companyId = req.companyScope;
+        if (!companyId && req.body.company_id) {
+            companyId = req.body.company_id;
+        }
+        if (!companyId && order_id) {
+            const safeOid = order_id && !isNaN(Number(order_id)) ? Number(order_id) : null;
+            if (safeOid) {
+                const [orderRows] = await db.query('SELECT company_id FROM orders WHERE id = ?', [safeOid]);
+                if (orderRows.length > 0) companyId = orderRows[0].company_id;
+            }
+        }
 
         // Sanitize order_id - must be valid integer or null (foreign key constraint)
         const safeOrderId = order_id && !isNaN(Number(order_id)) ? Number(order_id) : null;
@@ -94,12 +105,14 @@ exports.createDelivery = async (req, res) => {
 
 exports.updateDeliveryStatus = async (req, res) => {
     try {
-        const { status, vehicle_id, signature } = req.body;
+        const { status, vehicle_id, signature, driver_name, plate_number } = req.body;
         const sets = ['status = ?'];
         const values = [status];
 
         if (vehicle_id) { sets.push('vehicle_id = ?'); values.push(vehicle_id); }
         if (signature) { sets.push('signature = ?'); values.push(signature); }
+        if (driver_name) { sets.push('driver_name = ?'); values.push(driver_name); }
+        if (plate_number) { sets.push('plate_number = ?'); values.push(plate_number); }
 
         const cs = companyScope(req);
         values.push(req.params.id, ...cs.params);

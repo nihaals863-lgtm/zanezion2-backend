@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const { companyFilter, companyScope } = require('../middleware/company');
 const { successResponse, errorResponse } = require('../utils/helpers');
+const { createNotification } = require('./notificationController');
 
 // --- ASSIGNMENTS ---
 exports.getAssignments = async (req, res) => {
@@ -32,6 +33,8 @@ exports.createAssignment = async (req, res) => {
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [companyId, assigneeId, task, location || null, status || 'Pending', priority || 'Normal', missionType || null, passengerName || null, pickupTime || null, dropLocation || null, pickupLocation || null, deliveryLocation || null, luggage || null, goodsDetails || null, weight || null]
         );
+        await createNotification({ companyId, userId: assigneeId, type: 'order', title: 'New Assignment', message: `You have been assigned: "${task}"`, link: '/dashboard?tab=assignments' });
+        await createNotification({ companyId, roleTarget: 'admin', type: 'order', title: 'Staff Assigned', message: `Task "${task}" assigned to staff`, link: '/dashboard/staff-terminal' });
         return successResponse(res, { id: result.insertId }, 'Assignment created.', 201);
     } catch (err) { return errorResponse(res, 'Failed to create assignment.', 500); }
 };
@@ -133,6 +136,7 @@ exports.createLeaveRequest = async (req, res) => {
             `INSERT INTO leave_requests (company_id, user_id, leave_type, start_date, end_date, reason) VALUES (?, ?, ?, ?, ?, ?)`,
             [companyId, req.user.id, leave_type, start_date, end_date, reason || null]
         );
+        await createNotification({ companyId, roleTarget: 'admin', type: 'alert', title: 'Leave Request Submitted', message: `${req.user.name || 'Staff'} requested ${leave_type} leave (${start_date} to ${end_date})`, link: '/dashboard/leave' });
         return successResponse(res, { id: result.insertId }, 'Leave request submitted.', 201);
     } catch (err) { return errorResponse(res, 'Failed to submit leave request.', 500); }
 };
@@ -145,6 +149,11 @@ exports.updateLeaveRequest = async (req, res) => {
             `UPDATE leave_requests SET status = ?, reviewed_by = ? WHERE id = ?${cs.clause}`,
             [status, req.user.id, req.params.id, ...cs.params]
         );
+        // Notify the staff member about approval/rejection
+        const [leaveRow] = await db.query('SELECT user_id, company_id FROM leave_requests WHERE id = ?', [req.params.id]);
+        if (leaveRow.length > 0) {
+            await createNotification({ companyId: leaveRow[0].company_id, userId: leaveRow[0].user_id, type: 'alert', title: `Leave ${status}`, message: `Your leave request has been ${status.toLowerCase()} by ${req.user.name || 'Admin'}`, link: '/dashboard?tab=leave' });
+        }
         return successResponse(res, { id: req.params.id, status }, 'Leave request updated.');
     } catch (err) { return errorResponse(res, 'Failed to update leave request.', 500); }
 };

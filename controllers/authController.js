@@ -15,7 +15,7 @@ exports.login = async (req, res) => {
         }
 
         const [users] = await db.query(
-            'SELECT u.*, c.name as company_name FROM users u LEFT JOIN companies c ON u.company_id = c.id WHERE u.email = ?',
+            'SELECT u.*, c.name as company_name, c.plan as company_plan, c.client_type, c.tagline FROM users u LEFT JOIN companies c ON u.company_id = c.id WHERE u.email = ?',
             [email]
         );
 
@@ -85,6 +85,9 @@ exports.login = async (req, res) => {
                 role: user.role,
                 company_id: user.company_id,
                 company_name: user.company_name,
+                plan: user.company_plan || 'Free',
+                client_type: user.client_type || 'SaaS',
+                is_personal: user.tagline === 'Personal' || user.company_plan === 'Free',
                 phone: user.phone,
                 profile_pic_url: user.profile_pic_url,
                 is_available: user.is_available,

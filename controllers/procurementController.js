@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const { companyFilter, companyScope } = require('../middleware/company');
 const { successResponse, errorResponse } = require('../utils/helpers');
+const { createNotification } = require('./notificationController');
 
 // --- PURCHASE REQUESTS ---
 exports.getRequests = async (req, res) => {
@@ -27,6 +28,8 @@ exports.createRequest = async (req, res) => {
             `INSERT INTO purchase_requests (company_id, item_name, items, category, quantity, estimated_cost, requester, requester_id, priority, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [companyId, finalItemName || null, JSON.stringify(items || []), category || null, finalQuantity || 0, estimated_cost || 0, requester || req.user.name, req.user.id, priority || 'Normal', notes || null]
         );
+        await createNotification({ companyId, roleTarget: 'procurement', type: 'order', title: 'New Purchase Request', message: `PR #${result.insertId} — "${finalItemName}" by ${req.user.name || 'Staff'}`, link: '/dashboard/purchase-requests' });
+        await createNotification({ companyId, roleTarget: 'admin', type: 'order', title: 'New Purchase Request', message: `PR #${result.insertId} — "${finalItemName}"`, link: '/dashboard/purchase-requests' });
         return successResponse(res, { id: result.insertId }, 'Purchase request created.', 201);
     } catch (err) { 
         console.error('Create request error:', err);
@@ -46,6 +49,11 @@ exports.updateRequest = async (req, res) => {
         const cs = companyScope(req);
         values.push(req.params.id, ...cs.params);
         await db.query(`UPDATE purchase_requests SET ${sets.join(', ')} WHERE id = ?${cs.clause}`, values);
+        const status = req.body.status;
+        if (status) {
+            await createNotification({ companyId: req.companyScope, roleTarget: 'procurement', type: 'order', title: `Purchase Request ${status}`, message: `PR #${req.params.id} status → ${status}`, link: '/dashboard/purchase-requests' });
+            await createNotification({ companyId: req.companyScope, roleTarget: 'admin', type: 'order', title: `Purchase Request ${status}`, message: `PR #${req.params.id} updated to ${status}`, link: '/dashboard/purchase-requests' });
+        }
         return successResponse(res, { id: req.params.id }, 'Request updated.');
     } catch (err) { return errorResponse(res, 'Failed to update request.', 500); }
 };
@@ -88,6 +96,8 @@ exports.createQuote = async (req, res) => {
             `INSERT INTO quotes (company_id, vendor_id, purchase_request_id, items, total_amount, validity_date, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
             [companyId, vId, prId || null, JSON.stringify(items || []), finalAmount || 0, finalValidity || null, status || 'Pending', notes || null]
         );
+        await createNotification({ companyId, roleTarget: 'procurement', type: 'order', title: 'New Quote Received', message: `Quote #${result.insertId} — $${finalAmount || 0}`, link: '/dashboard/quotes' });
+        await createNotification({ companyId, roleTarget: 'admin', type: 'order', title: 'New Quote Received', message: `Quote #${result.insertId} — $${finalAmount || 0}`, link: '/dashboard/quotes' });
         return successResponse(res, { id: result.insertId }, 'Quote created.', 201);
     } catch (err) {
         console.error('Create quote error:', err);
@@ -153,6 +163,9 @@ exports.createPO = async (req, res) => {
             `INSERT INTO purchase_orders (company_id, vendor_id, items, total_amount, notes) VALUES (?, ?, ?, ?, ?)`,
             [companyId, vId, JSON.stringify(items || []), finalAmount, notes || null]
         );
+        await createNotification({ companyId, roleTarget: 'procurement', type: 'order', title: 'Purchase Order Created', message: `PO #${result.insertId} — $${finalAmount}`, link: '/dashboard/purchase-orders' });
+        await createNotification({ companyId, roleTarget: 'admin', type: 'order', title: 'New Purchase Order', message: `PO #${result.insertId} — $${finalAmount}`, link: '/dashboard/purchase-orders' });
+        await createNotification({ companyId, roleTarget: 'inventory', type: 'alert', title: 'Incoming PO', message: `PO #${result.insertId} created — prepare for receiving`, link: '/dashboard/purchase-orders' });
         return successResponse(res, { id: result.insertId }, 'PO created.', 201);
     } catch (err) { return errorResponse(res, 'Failed to create PO.', 500); }
 };
@@ -220,6 +233,10 @@ exports.receiveGoods = async (req, res) => {
 
         const newStatus = allReceived ? 'Received' : 'Partially Received';
         await db.query(`UPDATE purchase_orders SET items = ?, status = ? WHERE id = ?${cs.clause}`, [JSON.stringify(poItems), newStatus, id, ...cs.params]);
+
+        await createNotification({ companyId: pos[0].company_id, roleTarget: 'procurement', type: 'delivery', title: `PO #${id} — ${newStatus}`, message: `Goods ${newStatus.toLowerCase()} and inventory updated`, link: '/dashboard/purchase-orders' });
+        await createNotification({ companyId: pos[0].company_id, roleTarget: 'inventory', type: 'delivery', title: 'Inventory Updated from PO', message: `Stock updated from PO #${id}`, link: '/dashboard/inventory' });
+        await createNotification({ companyId: pos[0].company_id, roleTarget: 'admin', type: 'delivery', title: `PO #${id} — ${newStatus}`, message: `Goods received and inventory synced`, link: '/dashboard/purchase-orders' });
 
         return successResponse(res, { id, status: newStatus }, 'Goods received and inventory auto-updated.');
     } catch (err) {

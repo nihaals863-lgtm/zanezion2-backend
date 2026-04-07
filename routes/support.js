@@ -3,6 +3,7 @@ const router = express.Router();
 const ctrl = require('../controllers/supportController');
 const { verifyToken } = require('../middleware/auth');
 const { scopeByCompany } = require('../middleware/company');
+const upload = require('../middleware/upload');
 
 router.use(verifyToken, scopeByCompany);
 
@@ -13,8 +14,8 @@ router.patch('/tickets/:id/status', ctrl.updateTicketStatus);
 
 // Events
 router.get('/events', ctrl.getEvents);
-router.post('/events', ctrl.createEvent);
-router.put('/events/:id', ctrl.updateEvent);
+router.post('/events', upload.single('image'), ctrl.createEvent);
+router.put('/events/:id', upload.single('image'), ctrl.updateEvent);
 router.delete('/events/:id', ctrl.deleteEvent);
 
 // Guest Requests

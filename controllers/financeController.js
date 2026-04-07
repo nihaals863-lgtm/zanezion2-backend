@@ -18,7 +18,15 @@ exports.getInvoices = async (req, res) => {
 exports.createInvoice = async (req, res) => {
     try {
         const { order_id, client_id, amount, due_date, status } = req.body;
-        const companyId = req.companyScope;
+        // For super_admin: companyScope is null, so resolve from client_id or order
+        let companyId = req.companyScope;
+        if (!companyId && client_id) {
+            companyId = client_id;
+        }
+        if (!companyId && order_id) {
+            const [orderRows] = await db.query('SELECT company_id FROM orders WHERE id = ?', [order_id]);
+            if (orderRows.length > 0) companyId = orderRows[0].company_id;
+        }
         const [result] = await db.query(
             `INSERT INTO invoices (company_id, order_id, client_id, amount, due_date, status) VALUES (?, ?, ?, ?, ?, ?)`,
             [companyId, order_id || null, client_id || null, amount, due_date || null, status || 'unpaid']
@@ -31,6 +39,21 @@ exports.createInvoice = async (req, res) => {
             title: 'Invoice Generated',
             message: `Invoice #${result.insertId} created — $${amount}`,
             link: '/dashboard/invoices'
+        });
+        await createNotification({
+            companyId,
+            roleTarget: 'customer',
+            type: 'alert',
+            title: 'New Invoice',
+            message: `Invoice #${result.insertId} — $${amount} has been generated for your order`,
+            link: '/dashboard/invoices'
+        });
+        await createNotification({
+            roleTarget: 'super_admin',
+            type: 'alert',
+            title: 'Invoice Generated',
+            message: `Invoice #${result.insertId} — $${amount}`,
+            link: '/dashboard/clients'
         });
 
         return successResponse(res, { id: result.insertId }, 'Invoice created.', 201);
