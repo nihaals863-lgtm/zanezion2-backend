@@ -131,6 +131,28 @@ exports.updateRequestStatus = async (req, res) => {
     } catch (err) { return errorResponse(res, 'Failed to update request.', 500); }
 };
 
+// PUT /api/saas/requests/:id — Full update of saas request fields
+exports.updateRequest = async (req, res) => {
+    try {
+        const { client_name, email, phone, company_name, plan, contact_person, country, status, payment_status } = req.body;
+        const sets = [];
+        const values = [];
+        if (client_name !== undefined) { sets.push('client_name = ?'); values.push(client_name); }
+        if (email !== undefined) { sets.push('email = ?'); values.push(email); }
+        if (phone !== undefined) { sets.push('phone = ?'); values.push(phone); }
+        if (company_name !== undefined) { sets.push('company_name = ?'); values.push(company_name); }
+        if (plan !== undefined) { sets.push('plan = ?'); values.push(plan); }
+        if (contact_person !== undefined) { sets.push('contact_person = ?'); values.push(contact_person); }
+        if (country !== undefined) { sets.push('country = ?'); values.push(country); }
+        if (status !== undefined) { sets.push('status = ?'); values.push(status); }
+        if (payment_status !== undefined) { sets.push('payment_status = ?'); values.push(payment_status); }
+        if (sets.length === 0) return errorResponse(res, 'No fields to update.', 400);
+        values.push(req.params.id);
+        await db.query(`UPDATE saas_requests SET ${sets.join(', ')} WHERE id = ?`, values);
+        return successResponse(res, { id: req.params.id }, 'Request updated.');
+    } catch (err) { return errorResponse(res, 'Failed to update request.', 500); }
+};
+
 exports.deleteRequest = async (req, res) => {
     try {
         await db.query('DELETE FROM saas_requests WHERE id = ?', [req.params.id]);
